@@ -22,8 +22,22 @@ class Settings(BaseSettings):
     azure_document_intelligence_endpoint: AnyUrl | str | None = None
     azure_document_intelligence_key: str | None = None
     azure_document_intelligence_model_id: str = "prebuilt-invoice"
+    azure_document_intelligence_read_model_id: str = "prebuilt-read"
     extraction_worker_poll_seconds: float = 2.0
     extraction_worker_batch_size: int = 5
+    azure_search_endpoint: AnyUrl | str | None = None
+    azure_search_api_key: str | None = None
+    azure_search_index_name: str = "researchops-document-chunks"
+    azure_openai_endpoint: AnyUrl | str | None = None
+    azure_openai_api_key: str | None = None
+    azure_openai_api_version: str = "2024-10-21"
+    azure_openai_embedding_deployment: str = "text-embedding-3-small"
+    azure_openai_embedding_dimensions: int = 1536
+    azure_openai_chat_deployment: str = "gpt-4o-mini"
+    indexing_worker_poll_seconds: float = 2.0
+    indexing_chunk_size: int = 1200
+    indexing_chunk_overlap: int = 200
+    qa_top_chunks: int = 5
 
     @property
     def has_azure_storage_config(self) -> bool:
@@ -35,6 +49,14 @@ class Settings(BaseSettings):
     @property
     def has_document_intelligence_config(self) -> bool:
         return bool(self.azure_document_intelligence_endpoint)
+
+    @property
+    def has_azure_search_config(self) -> bool:
+        return bool(self.azure_search_endpoint)
+
+    @property
+    def has_azure_openai_config(self) -> bool:
+        return bool(self.azure_openai_endpoint)
 
 
 @lru_cache

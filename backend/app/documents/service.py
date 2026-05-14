@@ -14,6 +14,7 @@ from app.database.models import (
     Document,
     DocumentVersion,
     ExtractionRun,
+    IndexingRun,
     Workflow,
     WorkflowStep,
 )
@@ -169,6 +170,33 @@ async def create_document_upload(
             correlation_id=correlation_id,
         )
         records.extend([extraction_run, extraction_audit])
+
+    indexing_run_id = uuid.uuid4()
+    indexing_run = IndexingRun(
+        id=indexing_run_id,
+        document_id=document_id,
+        document_version_id=version_id,
+        status="pending",
+        read_model_id=settings.azure_document_intelligence_read_model_id,
+        embedding_model=settings.azure_openai_embedding_deployment,
+        chunk_count=0,
+    )
+    indexing_audit = AuditEvent(
+        actor_type="system",
+        actor_id=None,
+        document_id=document_id,
+        workflow_id=workflow_id,
+        event_type="indexing.requested",
+        after_value={
+            "indexing_run_id": str(indexing_run_id),
+            "read_model_id": settings.azure_document_intelligence_read_model_id,
+            "status": "pending",
+        },
+        reason="Automatic document indexing queued for Q&A",
+        source_ip=source_ip,
+        correlation_id=correlation_id,
+    )
+    records.extend([indexing_run, indexing_audit])
 
     session.add_all(records)
     try:

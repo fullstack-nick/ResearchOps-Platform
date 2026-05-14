@@ -145,3 +145,56 @@ export type AuditEvent = {
 export type AuditEventListResponse = {
   audit_events: AuditEvent[];
 };
+
+export type IndexingRun = {
+  id: string;
+  document_id: string;
+  document_version_id: string;
+  status: string;
+  read_model_id: string;
+  embedding_model: string | null;
+  chunk_count: number;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+export type DocumentChunk = {
+  id: string;
+  chunk_index: number;
+  content: string;
+  page_number: number | null;
+  char_count: number;
+};
+
+export type IndexingResponse = {
+  document_id: string;
+  status: string;
+  latest_run: IndexingRun | null;
+  chunk_count: number;
+  chunks: DocumentChunk[];
+};
+
+export type Citation = {
+  chunk_id: string;
+  page_number: number | null;
+  content: string;
+  score: number | null;
+};
+
+export type QuestionAnswer = {
+  id: string;
+  document_id: string;
+  question: string;
+  answer: string | null;
+  status: string;
+  citations: Citation[];
+  model_id: string | null;
+  error_message: string | null;
+  created_at: string;
+};
+
+export type QuestionListResponse = {
+  questions: QuestionAnswer[];
+};

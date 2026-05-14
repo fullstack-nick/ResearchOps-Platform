@@ -23,6 +23,7 @@ import {
 } from '../api/labels';
 import type { ExtractedField, ExtractionResponse } from '../api/types';
 import { PdfPreview } from '../components/PdfPreview';
+import { QaPanel } from '../components/QaPanel';
 import { StatusBadge } from '../components/StatusBadge';
 
 type CorrectionPayload = {
@@ -173,6 +174,8 @@ export function DocumentPage() {
             onRetry={() => retryMutation.mutate()}
             onCorrect={(payload) => correctionMutation.mutate(payload)}
           />
+
+          <QaPanel documentId={document.id} />
 
           <section className="rounded border border-slate-200 bg-white p-4">
             <h3 className="text-base font-semibold text-slate-950">Audit timeline</h3>

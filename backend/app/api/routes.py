@@ -23,6 +23,18 @@ from app.extraction.service import (
     get_document_extraction,
     retry_extraction,
 )
+from app.search.schemas import (
+    IndexingResponse,
+    QuestionAnswerRead,
+    QuestionListResponse,
+    QuestionRequest,
+)
+from app.search.service import (
+    answer_document_question,
+    get_document_indexing,
+    list_document_questions,
+    retry_indexing,
+)
 
 router = APIRouter()
 
@@ -103,6 +115,49 @@ async def correct_document_field(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ExtractedFieldRead:
     return await correct_extracted_field(session, document_id, field_id, payload, request)
+
+
+@router.get("/documents/{document_id}/indexing", response_model=IndexingResponse)
+async def document_indexing(
+    document_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> IndexingResponse:
+    return await get_document_indexing(session, document_id)
+
+
+@router.post("/documents/{document_id}/indexing/retry", response_model=IndexingResponse)
+async def retry_document_indexing(
+    document_id: UUID,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> IndexingResponse:
+    return await retry_indexing(session, document_id, request)
+
+
+@router.post(
+    "/documents/{document_id}/questions",
+    response_model=QuestionAnswerRead,
+    status_code=201,
+)
+async def ask_document_question(
+    document_id: UUID,
+    payload: QuestionRequest,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> QuestionAnswerRead:
+    record = await answer_document_question(session, document_id, payload.question, request)
+    return QuestionAnswerRead.model_validate(record)
+
+
+@router.get("/documents/{document_id}/questions", response_model=QuestionListResponse)
+async def document_questions(
+    document_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> QuestionListResponse:
+    records = await list_document_questions(session, document_id)
+    return QuestionListResponse(
+        questions=[QuestionAnswerRead.model_validate(record) for record in records]
+    )
 
 
 @router.get("/dashboard/summary", response_model=DashboardSummary)

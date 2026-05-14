@@ -2,7 +2,13 @@ import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../App';
-import { auditFixture, documentFixture, extractionFixture } from '../test/fixtures';
+import {
+  auditFixture,
+  documentFixture,
+  extractionFixture,
+  indexingFixture,
+  questionsFixture,
+} from '../test/fixtures';
 import { renderWithProviders } from '../test/render';
 
 describe('DocumentPage', () => {
@@ -16,6 +22,12 @@ describe('DocumentPage', () => {
         }
         if (url.includes('/extraction')) {
           return new Response(JSON.stringify(extractionFixture), { status: 200 });
+        }
+        if (url.includes('/indexing')) {
+          return new Response(JSON.stringify(indexingFixture), { status: 200 });
+        }
+        if (url.includes('/questions')) {
+          return new Response(JSON.stringify(questionsFixture), { status: 200 });
         }
         return new Response(JSON.stringify(documentFixture), { status: 200 });
       }),
@@ -59,6 +71,12 @@ describe('DocumentPage', () => {
       }
       if (url.includes('/extraction')) {
         return new Response(JSON.stringify(extractionFixture), { status: 200 });
+      }
+      if (url.includes('/indexing')) {
+        return new Response(JSON.stringify(indexingFixture), { status: 200 });
+      }
+      if (url.includes('/questions')) {
+        return new Response(JSON.stringify(questionsFixture), { status: 200 });
       }
       return new Response(JSON.stringify(documentFixture), { status: 200 });
     });

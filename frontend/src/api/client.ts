@@ -5,6 +5,9 @@ import type {
   DocumentRecord,
   ExtractedField,
   ExtractionResponse,
+  IndexingResponse,
+  QuestionAnswer,
+  QuestionListResponse,
   UploadResponse,
   WorkflowType,
 } from './types';
@@ -70,6 +73,28 @@ export const api = {
     return request<UploadResponse>(`/api/documents?workflow_type=${workflowType}`, {
       method: 'POST',
       body: form,
+    });
+  },
+
+  async getDocumentIndexing(documentId: string): Promise<IndexingResponse> {
+    return request<IndexingResponse>(`/api/documents/${documentId}/indexing`);
+  },
+
+  async retryIndexing(documentId: string): Promise<IndexingResponse> {
+    return request<IndexingResponse>(`/api/documents/${documentId}/indexing/retry`, {
+      method: 'POST',
+    });
+  },
+
+  async getQuestions(documentId: string): Promise<QuestionListResponse> {
+    return request<QuestionListResponse>(`/api/documents/${documentId}/questions`);
+  },
+
+  async askQuestion(documentId: string, question: string): Promise<QuestionAnswer> {
+    return request<QuestionAnswer>(`/api/documents/${documentId}/questions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
     });
   },
 

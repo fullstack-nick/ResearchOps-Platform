@@ -36,6 +36,8 @@ WORKFLOW_STEP_STATUSES = ("pending", "completed", "skipped")
 ACTOR_TYPES = ("user", "agent", "system")
 STORAGE_PROVIDERS = ("local", "azure_blob")
 EXTRACTION_RUN_STATUSES = ("pending", "processing", "completed", "failed")
+INDEXING_RUN_STATUSES = ("pending", "processing", "completed", "failed")
+QUESTION_STATUSES = ("completed", "failed")
 
 
 def utc_now() -> datetime:
@@ -441,3 +443,106 @@ class AuditEvent(Base):
 
     document: Mapped[Document | None] = relationship(back_populates="audit_events")
     workflow: Mapped[Workflow | None] = relationship(back_populates="audit_events")
+
+
+class IndexingRun(Base):
+    __tablename__ = "indexing_runs"
+    __table_args__ = (
+        CheckConstraint(
+            f"status in {INDEXING_RUN_STATUSES!r}".replace("[", "(").replace("]", ")"),
+            name="ck_indexing_runs_status",
+        ),
+        Index("ix_indexing_runs_status_created", "status", "created_at"),
+        Index("ix_indexing_runs_document_created", "document_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
+    read_model_id: Mapped[str] = mapped_column(String(120), nullable=False, default="prebuilt-read")
+    embedding_model: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    document: Mapped[Document] = relationship()
+    document_version: Mapped[DocumentVersion] = relationship()
+    chunks: Mapped[list[DocumentChunk]] = relationship(
+        back_populates="indexing_run",
+        cascade="all, delete-orphan",
+        order_by="DocumentChunk.chunk_index",
+    )
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "indexing_run_id",
+            "chunk_index",
+            name="uq_document_chunks_run_index",
+        ),
+        Index("ix_document_chunks_document", "document_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    indexing_run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("indexing_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    search_document_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
+
+    indexing_run: Mapped[IndexingRun] = relationship(back_populates="chunks")
+
+
+class DocumentQuestion(Base):
+    __tablename__ = "document_questions"
+    __table_args__ = (
+        CheckConstraint(
+            f"status in {QUESTION_STATUSES!r}".replace("[", "(").replace("]", ")"),
+            name="ck_document_questions_status",
+        ),
+        Index("ix_document_questions_document_created", "document_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="completed")
+    citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    model_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    asked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )

@@ -4,6 +4,8 @@ import type {
   DocumentListResponse,
   DocumentRecord,
   ExtractionResponse,
+  IndexingResponse,
+  QuestionListResponse,
 } from '../api/types';
 
 export const documentFixture: DocumentRecord = {
@@ -185,6 +187,64 @@ export const extractionFixture: ExtractionResponse = {
       source_page: 1,
       source_regions: [],
       raw_value: null,
+    },
+  ],
+};
+
+export const indexingFixture: IndexingResponse = {
+  document_id: documentFixture.id,
+  status: 'completed',
+  latest_run: {
+    id: 'aa000000-0000-4000-8000-000000000001',
+    document_id: documentFixture.id,
+    document_version_id: '44444444-4444-4444-8444-444444444444',
+    status: 'completed',
+    read_model_id: 'prebuilt-read',
+    embedding_model: 'text-embedding-3-small',
+    chunk_count: 2,
+    error_message: null,
+    created_at: '2026-05-14T10:00:03Z',
+    started_at: '2026-05-14T10:00:06Z',
+    completed_at: '2026-05-14T10:00:14Z',
+  },
+  chunk_count: 2,
+  chunks: [
+    {
+      id: 'bb000000-0000-4000-8000-000000000001',
+      chunk_index: 0,
+      content: 'Helix Lab Supplies GmbH invoice HLS-2026-0142. Invoice total 4010.30 EUR.',
+      page_number: 1,
+      char_count: 72,
+    },
+    {
+      id: 'bb000000-0000-4000-8000-000000000002',
+      chunk_index: 1,
+      content: 'Payment terms are net 14 days from the invoice issue date.',
+      page_number: 2,
+      char_count: 58,
+    },
+  ],
+};
+
+export const questionsFixture: QuestionListResponse = {
+  questions: [
+    {
+      id: 'cc000000-0000-4000-8000-000000000001',
+      document_id: documentFixture.id,
+      question: 'What is the invoice total?',
+      answer: 'Based on [Source 1]: the invoice total is 4010.30 EUR.',
+      status: 'completed',
+      citations: [
+        {
+          chunk_id: `${documentFixture.id}_0`,
+          page_number: 1,
+          content: 'Helix Lab Supplies GmbH invoice HLS-2026-0142. Invoice total 4010.30 EUR.',
+          score: 0.95,
+        },
+      ],
+      model_id: 'gpt-4o-mini',
+      error_message: null,
+      created_at: '2026-05-14T10:05:00Z',
     },
   ],
 };
