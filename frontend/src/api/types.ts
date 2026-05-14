@@ -23,9 +23,19 @@ export type Workflow = {
 export type DocumentVersion = {
   id: string;
   version_number: number;
+  storage_provider: string;
+  storage_container: string | null;
+  storage_object_key: string | null;
   size_bytes: number;
   sha256: string;
   created_at: string;
+};
+
+export type ExtractionSummary = {
+  status: string;
+  missing_field_count: number;
+  latest_run_id: string | null;
+  failed: boolean;
 };
 
 export type DocumentRecord = {
@@ -41,6 +51,7 @@ export type DocumentRecord = {
   created_at: string;
   updated_at: string;
   workflow: Workflow;
+  extraction_summary: ExtractionSummary;
   versions: DocumentVersion[];
 };
 
@@ -57,7 +68,63 @@ export type DashboardSummary = {
   awaiting_review: number;
   documents_by_workflow: Array<{ workflow_type: WorkflowType; count: number }>;
   recent_failures: number;
+  documents_with_missing_fields: number;
   average_processing_seconds: number | null;
+};
+
+export type ExtractionRun = {
+  id: string;
+  document_id: string;
+  document_version_id: string;
+  status: string;
+  model_id: string;
+  missing_fields: string[];
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+export type ExtractedField = {
+  id: string;
+  field_key: string;
+  label: string;
+  value: string | null;
+  display_value: string | null;
+  value_type: string;
+  confidence: number | null;
+  source_page: number | null;
+  source_regions: Array<Record<string, unknown>>;
+  raw_value: Record<string, unknown> | null;
+  is_missing: boolean;
+  display_order: number;
+  corrected_value: string | null;
+  correction_reason: string | null;
+  corrected_at: string | null;
+};
+
+export type ExtractedLineItem = {
+  id: string;
+  item_index: number;
+  description: string | null;
+  quantity: number | null;
+  unit_price: number | null;
+  amount: number | null;
+  currency: string | null;
+  confidence: number | null;
+  source_page: number | null;
+  source_regions: Array<Record<string, unknown>>;
+  raw_value: Record<string, unknown> | null;
+};
+
+export type ExtractionResponse = {
+  document_id: string;
+  available: boolean;
+  status: string;
+  latest_run: ExtractionRun | null;
+  fields: ExtractedField[];
+  missing_fields: string[];
+  line_items: ExtractedLineItem[];
 };
 
 export type AuditEvent = {

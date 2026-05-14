@@ -42,6 +42,35 @@ def configured_app(
     from app.main import create_app
 
     app = create_app()
+    blob_store: dict[str, bytes] = {}
+
+    from app.documents import service as document_service
+    from app.documents.azure_storage import BlobUploadResult
+
+    def fake_upload_document_blob(
+        settings: object,
+        object_key: str,
+        content: bytes,
+        content_type: str,
+        metadata: dict[str, str],
+    ) -> BlobUploadResult:
+        blob_store[object_key] = content
+        return BlobUploadResult(
+            container="test-documents",
+            object_key=object_key,
+            url=f"https://storage.example.test/test-documents/{object_key}",
+            etag="test-etag",
+        )
+
+    def fake_download_document_blob(
+        settings: object,
+        container: str,
+        object_key: str,
+    ) -> bytes:
+        return blob_store[object_key]
+
+    monkeypatch.setattr(document_service, "upload_document_blob", fake_upload_document_blob)
+    monkeypatch.setattr(document_service, "download_document_blob", fake_download_document_blob)
     return app
 
 

@@ -36,7 +36,7 @@ export function UploadPage() {
       return;
     }
     if (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf')) {
-      setValidationError('Only PDF files can be uploaded in Phase 1.');
+      setValidationError('Only PDF files can be uploaded in Phase 2.');
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
@@ -49,7 +49,9 @@ export function UploadPage() {
   return (
     <div className="max-w-3xl">
       <h2 className="text-2xl font-semibold text-slate-950">Upload operational document</h2>
-      <p className="mt-1 text-sm text-slate-600">Local intake creates a document record, workflow item, and audit trail.</p>
+      <p className="mt-1 text-sm text-slate-600">
+        Azure-backed intake creates a document record, workflow item, audit trail, and procurement extraction job.
+      </p>
 
       <form onSubmit={onSubmit} className="mt-6 space-y-5 rounded border border-slate-200 bg-white p-5">
         <label className="block">

@@ -16,6 +16,10 @@ dependencies = [
   "httpx==0.28.1",
   "orjson==3.11.9",
   "structlog==25.5.0",
+  "azure-ai-documentintelligence==1.0.2",
+  "azure-storage-blob==12.28.0",
+  "azure-identity==1.25.3",
+  "azure-core==1.41.0",
 ]
 
 [dependency-groups]

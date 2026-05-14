@@ -2,20 +2,26 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
-from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from fastapi.responses import Response
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.schemas import AuditEventListResponse, AuditEventRead
 from app.dashboard.schemas import DashboardSummary, QueueCount
-from app.database.models import AuditEvent, Document, Workflow
+from app.database.models import AuditEvent, Document, ExtractionRun, Workflow
 from app.database.session import get_session
 from app.documents.schemas import DocumentListResponse, DocumentRead, UploadResponse
 from app.documents.service import (
     create_document_upload,
     get_document,
-    get_document_file_path,
+    get_document_file_bytes,
     list_documents,
+)
+from app.extraction.schemas import ExtractedFieldRead, ExtractionResponse, FieldCorrectionRequest
+from app.extraction.service import (
+    correct_extracted_field,
+    get_document_extraction,
+    retry_extraction,
 )
 
 router = APIRouter()
@@ -59,15 +65,44 @@ async def document_detail(
 async def document_file(
     document_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> FileResponse:
-    document, path = await get_document_file_path(session, document_id)
-    return FileResponse(
-        path,
+) -> Response:
+    document, content = await get_document_file_bytes(session, document_id)
+    return Response(
+        content=content,
         media_type="application/pdf",
-        filename=document.safe_filename,
-        content_disposition_type="inline",
-        headers={"Cache-Control": "private, max-age=60"},
+        headers={
+            "Cache-Control": "private, max-age=60",
+            "Content-Disposition": f'inline; filename="{document.safe_filename}"',
+        },
     )
+
+
+@router.get("/documents/{document_id}/extraction", response_model=ExtractionResponse)
+async def document_extraction(
+    document_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ExtractionResponse:
+    return await get_document_extraction(session, document_id)
+
+
+@router.post("/documents/{document_id}/extraction/retry", response_model=ExtractionResponse)
+async def retry_document_extraction(
+    document_id: UUID,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ExtractionResponse:
+    return await retry_extraction(session, document_id, request)
+
+
+@router.patch("/documents/{document_id}/fields/{field_id}", response_model=ExtractedFieldRead)
+async def correct_document_field(
+    document_id: UUID,
+    field_id: UUID,
+    payload: FieldCorrectionRequest,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ExtractedFieldRead:
+    return await correct_extracted_field(session, document_id, field_id, payload, request)
 
 
 @router.get("/dashboard/summary", response_model=DashboardSummary)
@@ -79,7 +114,29 @@ async def dashboard_summary(
         select(func.count(Workflow.id)).where(Workflow.status == "awaiting_review")
     )
     failures_result = await session.execute(
-        select(func.count(Workflow.id)).where(Workflow.status == "failed")
+        select(func.count(Document.id)).where(Document.status == "extraction_failed")
+    )
+    latest_runs = (
+        select(
+            ExtractionRun.document_id,
+            func.max(ExtractionRun.created_at).label("created_at"),
+        )
+        .group_by(ExtractionRun.document_id)
+        .subquery()
+    )
+    missing_fields_result = await session.execute(
+        select(func.count(ExtractionRun.id))
+        .join(
+            latest_runs,
+            and_(
+                ExtractionRun.document_id == latest_runs.c.document_id,
+                ExtractionRun.created_at == latest_runs.c.created_at,
+            ),
+        )
+        .where(
+            ExtractionRun.status == "completed",
+            func.jsonb_array_length(ExtractionRun.missing_fields) > 0,
+        )
     )
     grouped_result = await session.execute(
         select(Document.workflow_type, func.count(Document.id))
@@ -90,6 +147,7 @@ async def dashboard_summary(
         total_documents=int(total_result.scalar_one()),
         awaiting_review=int(awaiting_result.scalar_one()),
         recent_failures=int(failures_result.scalar_one()),
+        documents_with_missing_fields=int(missing_fields_result.scalar_one()),
         average_processing_seconds=None,
         documents_by_workflow=[
             QueueCount(workflow_type=row[0], count=int(row[1])) for row in grouped_result.all()

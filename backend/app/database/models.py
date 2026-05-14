@@ -5,10 +5,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -20,10 +23,19 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 DEMO_USER_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
 
 WORKFLOW_TYPES = ("procurement", "hr_onboarding", "grants", "contracts", "reports")
-DOCUMENT_STATUSES = ("uploaded", "archived")
+DOCUMENT_STATUSES = (
+    "uploaded",
+    "extraction_pending",
+    "extracting",
+    "extracted",
+    "extraction_failed",
+    "archived",
+)
 WORKFLOW_STATUSES = ("awaiting_review", "approved", "rejected", "completed", "failed")
 WORKFLOW_STEP_STATUSES = ("pending", "completed", "skipped")
 ACTOR_TYPES = ("user", "agent", "system")
+STORAGE_PROVIDERS = ("local", "azure_blob")
+EXTRACTION_RUN_STATUSES = ("pending", "processing", "completed", "failed")
 
 
 def utc_now() -> datetime:
@@ -126,6 +138,41 @@ class Document(Base):
         back_populates="document", cascade="all, delete-orphan", uselist=False
     )
     audit_events: Mapped[list[AuditEvent]] = relationship(back_populates="document")
+    extraction_runs: Mapped[list[ExtractionRun]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="ExtractionRun.created_at",
+    )
+    extracted_fields: Mapped[list[ExtractedField]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    extracted_line_items: Mapped[list[ExtractedLineItem]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+
+    @property
+    def extraction_summary(self) -> dict[str, Any]:
+        if self.workflow_type != "procurement":
+            return {
+                "status": "unavailable",
+                "missing_field_count": 0,
+                "latest_run_id": None,
+                "failed": False,
+            }
+        latest_run = self.extraction_runs[-1] if self.extraction_runs else None
+        if latest_run is None:
+            return {
+                "status": "not_requested",
+                "missing_field_count": 0,
+                "latest_run_id": None,
+                "failed": False,
+            }
+        return {
+            "status": latest_run.status,
+            "missing_field_count": len(latest_run.missing_fields or []),
+            "latest_run_id": latest_run.id,
+            "failed": latest_run.status == "failed",
+        }
 
 
 class DocumentVersion(Base):
@@ -136,6 +183,10 @@ class DocumentVersion(Base):
             "version_number",
             name="uq_document_versions_document_version",
         ),
+        CheckConstraint(
+            f"storage_provider in {STORAGE_PROVIDERS!r}".replace("[", "(").replace("]", ")"),
+            name="ck_document_versions_storage_provider",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -144,6 +195,10 @@ class DocumentVersion(Base):
     )
     version_number: Mapped[int] = mapped_column(nullable=False)
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    storage_provider: Mapped[str] = mapped_column(String(40), nullable=False, default="local")
+    storage_container: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    storage_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     size_bytes: Mapped[int] = mapped_column(nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
@@ -154,6 +209,136 @@ class DocumentVersion(Base):
     )
 
     document: Mapped[Document] = relationship(back_populates="versions")
+
+
+class ExtractionRun(Base):
+    __tablename__ = "extraction_runs"
+    __table_args__ = (
+        CheckConstraint(
+            f"status in {EXTRACTION_RUN_STATUSES!r}".replace("[", "(").replace("]", ")"),
+            name="ck_extraction_runs_status",
+        ),
+        Index("ix_extraction_runs_status_created", "status", "created_at"),
+        Index("ix_extraction_runs_document_created", "document_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
+    model_id: Mapped[str] = mapped_column(String(120), nullable=False, default="prebuilt-invoice")
+    missing_fields: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    document: Mapped[Document] = relationship(back_populates="extraction_runs")
+    document_version: Mapped[DocumentVersion] = relationship()
+    fields: Mapped[list[ExtractedField]] = relationship(
+        back_populates="extraction_run",
+        cascade="all, delete-orphan",
+        order_by="ExtractedField.display_order",
+    )
+    line_items: Mapped[list[ExtractedLineItem]] = relationship(
+        back_populates="extraction_run",
+        cascade="all, delete-orphan",
+        order_by="ExtractedLineItem.item_index",
+    )
+
+
+class ExtractedField(Base):
+    __tablename__ = "extracted_fields"
+    __table_args__ = (
+        UniqueConstraint(
+            "extraction_run_id",
+            "field_key",
+            name="uq_extracted_fields_run_field",
+        ),
+        Index("ix_extracted_fields_document_key", "document_id", "field_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+    extraction_run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("extraction_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    field_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    label: Mapped[str] = mapped_column(String(160), nullable=False)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    value_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_regions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    raw_value: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    is_missing: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    corrected_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correction_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    corrected_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    corrected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
+
+    document: Mapped[Document] = relationship(back_populates="extracted_fields")
+    extraction_run: Mapped[ExtractionRun] = relationship(back_populates="fields")
+
+    @property
+    def display_value(self) -> str | None:
+        return self.corrected_value if self.corrected_value is not None else self.value
+
+
+class ExtractedLineItem(Base):
+    __tablename__ = "extracted_line_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "extraction_run_id",
+            "item_index",
+            name="uq_extracted_line_items_run_index",
+        ),
+        Index("ix_extracted_line_items_document", "document_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+    extraction_run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("extraction_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    item_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_regions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    raw_value: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
+
+    document: Mapped[Document] = relationship(back_populates="extracted_line_items")
+    extraction_run: Mapped[ExtractionRun] = relationship(back_populates="line_items")
 
 
 class Workflow(Base):

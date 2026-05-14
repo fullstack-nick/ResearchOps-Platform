@@ -18,6 +18,8 @@ describe('QueuePage', () => {
 
     expect(await screen.findByText('invoice_helix_lab_supplies.pdf')).toBeInTheDocument();
     expect(screen.getByText('awaiting review')).toBeInTheDocument();
+    expect(screen.getByText('completed')).toBeInTheDocument();
+    expect(screen.getByText('1 missing')).toBeInTheDocument();
     expect(screen.getAllByText('Procurement').length).toBeGreaterThan(0);
   });
 });

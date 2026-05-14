@@ -3,7 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 
 import { api } from '../api/client';
 import { formatBytes, formatDateTime, workflowLabels } from '../api/labels';
-import { WorkflowType, workflowTypes } from '../api/types';
+import type { WorkflowType } from '../api/types';
+import { workflowTypes } from '../api/types';
 import { EmptyState } from '../components/EmptyState';
 import { StatusBadge } from '../components/StatusBadge';
 
@@ -14,10 +15,11 @@ function asWorkflowType(value: string | undefined): WorkflowType | undefined {
 
 export function QueuePage() {
   const params = useParams();
-  const workflowType = asWorkflowType(params.workflowType);
+  const failedExtractionQueue = params.workflowType === 'failed-extraction';
+  const workflowType = failedExtractionQueue ? undefined : asWorkflowType(params.workflowType);
   const { data, isLoading, error } = useQuery({
-    queryKey: ['documents', workflowType ?? 'all'],
-    queryFn: () => api.listDocuments(workflowType),
+    queryKey: ['documents', workflowType ?? 'all', failedExtractionQueue ? 'extraction_failed' : 'all'],
+    queryFn: () => api.listDocuments(workflowType, failedExtractionQueue ? 'extraction_failed' : undefined),
   });
 
   if (isLoading) return <p className="text-sm text-slate-600">Loading queue...</p>;
@@ -29,12 +31,22 @@ export function QueuePage() {
     <div className="space-y-5">
       <div>
         <h2 className="text-2xl font-semibold text-slate-950">
-          {workflowType ? workflowLabels[workflowType] : 'All workflow queues'}
+          {failedExtractionQueue
+            ? 'Failed extraction review'
+            : workflowType
+              ? workflowLabels[workflowType]
+              : 'All workflow queues'}
         </h2>
-        <p className="mt-1 text-sm text-slate-600">Review local intake items awaiting operational processing.</p>
+        <p className="mt-1 text-sm text-slate-600">Review Azure-backed intake items and extraction outcomes.</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Link
+          to="/queues/failed-extraction"
+          className="focus-ring rounded border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-slate-400"
+        >
+          Failed extraction
+        </Link>
         <Link
           to="/queues"
           className="focus-ring rounded border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-slate-400"
@@ -62,6 +74,7 @@ export function QueuePage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Document</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Workflow</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Extraction</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Size</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Uploaded</th>
               </tr>
@@ -78,6 +91,16 @@ export function QueuePage() {
                   <td className="px-4 py-3 text-sm text-slate-700">{workflowLabels[document.workflow_type]}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={document.workflow.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      <StatusBadge status={document.extraction_summary.status} />
+                      {document.extraction_summary.missing_field_count > 0 && (
+                        <span className="text-xs text-amber-700">
+                          {document.extraction_summary.missing_field_count} missing
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-700">{formatBytes(document.size_bytes)}</td>
                   <td className="px-4 py-3 text-sm text-slate-700">{formatDateTime(document.created_at)}</td>

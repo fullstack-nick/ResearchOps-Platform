@@ -23,7 +23,7 @@ export function Shell({ children }: ShellProps) {
             </div>
             <div>
               <h1 className="text-lg font-semibold text-slate-950">ResearchOps Azure Agent Platform</h1>
-              <p className="text-sm text-slate-600">Local Phase 1 foundation</p>
+              <p className="text-sm text-slate-600">Azure document extraction workspace</p>
             </div>
           </div>
           <nav aria-label="Primary navigation" className="flex flex-wrap gap-2">

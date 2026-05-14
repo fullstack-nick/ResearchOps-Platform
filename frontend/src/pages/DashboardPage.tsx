@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Clock3, FileText, ListChecks } from 'lucide-react';
+import { AlertTriangle, Clock3, FileText, ListChecks, SearchX } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { api } from '../api/client';
@@ -9,6 +9,7 @@ import { EmptyState } from '../components/EmptyState';
 const metricItems = [
   { key: 'total_documents', label: 'Documents', icon: FileText },
   { key: 'awaiting_review', label: 'Awaiting review', icon: ListChecks },
+  { key: 'documents_with_missing_fields', label: 'Missing fields', icon: SearchX },
   { key: 'recent_failures', label: 'Extraction failures', icon: AlertTriangle },
   { key: 'average_processing_seconds', label: 'Avg processing', icon: Clock3 },
 ] as const;
@@ -38,7 +39,7 @@ export function DashboardPage() {
         </Link>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Dashboard metrics">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Dashboard metrics">
         {metricItems.map((item) => {
           const value = data[item.key];
           return (
@@ -63,6 +64,17 @@ export function DashboardPage() {
             <h3 className="text-base font-semibold text-slate-950">Workflow queues</h3>
           </div>
           <div className="divide-y divide-slate-100">
+            {data.recent_failures > 0 && (
+              <Link
+                to="/queues/failed-extraction"
+                className="focus-ring flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-50"
+              >
+                <span className="text-sm font-medium text-slate-800">Failed extraction review</span>
+                <span className="rounded bg-red-50 px-2 py-1 text-sm font-semibold text-red-800">
+                  {data.recent_failures}
+                </span>
+              </Link>
+            )}
             {data.documents_by_workflow.map((queue) => (
               <Link
                 key={queue.workflow_type}

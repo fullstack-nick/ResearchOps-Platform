@@ -3,6 +3,8 @@ import type {
   DashboardSummary,
   DocumentListResponse,
   DocumentRecord,
+  ExtractedField,
+  ExtractionResponse,
   UploadResponse,
   WorkflowType,
 } from './types';
@@ -23,8 +25,11 @@ export const api = {
     return request<DashboardSummary>('/api/dashboard/summary');
   },
 
-  async listDocuments(workflowType?: WorkflowType): Promise<DocumentListResponse> {
-    const query = workflowType ? `?workflow_type=${encodeURIComponent(workflowType)}` : '';
+  async listDocuments(workflowType?: WorkflowType, status?: string): Promise<DocumentListResponse> {
+    const params = new URLSearchParams();
+    if (workflowType) params.set('workflow_type', workflowType);
+    if (status) params.set('status', status);
+    const query = params.toString() ? `?${params.toString()}` : '';
     return request<DocumentListResponse>(`/api/documents${query}`);
   },
 
@@ -34,6 +39,29 @@ export const api = {
 
   async getAuditEvents(documentId: string): Promise<AuditEventListResponse> {
     return request<AuditEventListResponse>(`/api/audit-events?document_id=${documentId}`);
+  },
+
+  async getDocumentExtraction(documentId: string): Promise<ExtractionResponse> {
+    return request<ExtractionResponse>(`/api/documents/${documentId}/extraction`);
+  },
+
+  async retryExtraction(documentId: string): Promise<ExtractionResponse> {
+    return request<ExtractionResponse>(`/api/documents/${documentId}/extraction/retry`, {
+      method: 'POST',
+    });
+  },
+
+  async correctField(
+    documentId: string,
+    fieldId: string,
+    correctedValue: string,
+    reason: string,
+  ): Promise<ExtractedField> {
+    return request<ExtractedField>(`/api/documents/${documentId}/fields/${fieldId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ corrected_value: correctedValue, reason }),
+    });
   },
 
   async uploadDocument(file: File, workflowType: WorkflowType): Promise<UploadResponse> {

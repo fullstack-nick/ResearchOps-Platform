@@ -20,3 +20,14 @@ export function formatDateTime(value: string): string {
     timeStyle: 'short',
   }).format(new Date(value));
 }
+
+export function formatConfidence(value: number | null): string {
+  if (value === null) return 'N/A';
+  return `${Math.round(value * 100)}%`;
+}
+
+export function formatAmount(value: number | null, currency: string | null): string {
+  if (value === null) return 'N/A';
+  if (!currency) return value.toFixed(2);
+  return `${currency} ${value.toFixed(2)}`;
+}

@@ -19,6 +19,7 @@ describe('DashboardPage', () => {
     expect(await screen.findByText('Operations dashboard')).toBeInTheDocument();
     expect(screen.getByText('Documents')).toBeInTheDocument();
     expect(screen.getByText('Awaiting review')).toBeInTheDocument();
+    expect(screen.getByText('Missing fields')).toBeInTheDocument();
     expect(screen.getByText('Procurement')).toBeInTheDocument();
   });
 });

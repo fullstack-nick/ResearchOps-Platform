@@ -11,4 +11,5 @@ class DashboardSummary(BaseModel):
     awaiting_review: int
     documents_by_workflow: list[QueueCount]
     recent_failures: int
+    documents_with_missing_fields: int
     average_processing_seconds: float | None

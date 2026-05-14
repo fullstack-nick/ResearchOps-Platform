@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 
 from fastapi import HTTPException, Request, UploadFile, status
 from sqlalchemy import Select, func, select
@@ -12,14 +13,15 @@ from app.database.models import (
     AuditEvent,
     Document,
     DocumentVersion,
+    ExtractionRun,
     Workflow,
     WorkflowStep,
 )
+from app.documents.azure_storage import download_document_blob, upload_document_blob
 from app.documents.storage import (
     read_limited_upload,
     resolve_storage_path,
     validate_pdf_upload,
-    write_document_bytes,
 )
 
 
@@ -35,6 +37,7 @@ def document_query() -> Select[tuple[Document]]:
     return select(Document).options(
         selectinload(Document.workflow).selectinload(Workflow.steps),
         selectinload(Document.versions),
+        selectinload(Document.extraction_runs),
     )
 
 
@@ -52,16 +55,24 @@ async def create_document_upload(
     document_id = uuid.uuid4()
     version_id = uuid.uuid4()
     workflow_id = uuid.uuid4()
-    relative_storage_path = write_document_bytes(
+
+    object_key = f"documents/{document_id}/versions/{version_id}/{safe_filename}"
+    blob = upload_document_blob(
         settings=settings,
-        document_id=document_id,
-        version_id=version_id,
-        safe_filename=safe_filename,
+        object_key=object_key,
         content=content,
+        content_type="application/pdf",
+        metadata={
+            "document_id": str(document_id),
+            "version_id": str(version_id),
+            "workflow_type": workflow_type,
+            "sha256": digest,
+        },
     )
 
     source_ip = request.client.host if request.client else None
     correlation_id = request.state.correlation_id
+    extraction_requested = workflow_type == "procurement"
     document = Document(
         id=document_id,
         owner_user_id=DEMO_USER_ID,
@@ -71,13 +82,17 @@ async def create_document_upload(
         size_bytes=len(content),
         sha256=digest,
         workflow_type=workflow_type,
-        status="uploaded",
+        status="extraction_pending" if extraction_requested else "uploaded",
     )
     version = DocumentVersion(
         id=version_id,
         document_id=document_id,
         version_number=1,
-        storage_path=relative_storage_path,
+        storage_path=blob.object_key,
+        storage_provider="azure_blob",
+        storage_container=blob.container,
+        storage_object_key=blob.object_key,
+        storage_url=blob.url,
         size_bytes=len(content),
         sha256=digest,
         created_by_user_id=DEMO_USER_ID,
@@ -107,7 +122,7 @@ async def create_document_upload(
             "size_bytes": len(content),
             "sha256": digest,
         },
-        reason="Phase 1 local document intake",
+        reason="Phase 2 Azure Blob document intake",
         source_ip=source_ip,
         correlation_id=correlation_id,
     )
@@ -126,15 +141,40 @@ async def create_document_upload(
         source_ip=source_ip,
         correlation_id=correlation_id,
     )
+    records: list[object] = [document, version, workflow, step, document_uploaded, workflow_created]
 
-    session.add_all([document, version, workflow, step, document_uploaded, workflow_created])
+    if extraction_requested:
+        extraction_run_id = uuid.uuid4()
+        extraction_run = ExtractionRun(
+            id=extraction_run_id,
+            document_id=document_id,
+            document_version_id=version_id,
+            status="pending",
+            model_id=settings.azure_document_intelligence_model_id,
+            missing_fields=[],
+        )
+        extraction_audit = AuditEvent(
+            actor_type="system",
+            actor_id=None,
+            document_id=document_id,
+            workflow_id=workflow_id,
+            event_type="extraction.requested",
+            after_value={
+                "extraction_run_id": str(extraction_run_id),
+                "model_id": settings.azure_document_intelligence_model_id,
+                "status": "pending",
+            },
+            reason="Automatic procurement invoice extraction queued",
+            source_ip=source_ip,
+            correlation_id=correlation_id,
+        )
+        records.extend([extraction_run, extraction_audit])
+
+    session.add_all(records)
     try:
         await session.commit()
     except Exception:
         await session.rollback()
-        stored = resolve_storage_path(settings, relative_storage_path)
-        if stored.exists():
-            stored.unlink()
         raise
 
     loaded = await get_document(session, document_id)
@@ -166,7 +206,9 @@ async def get_document(session: AsyncSession, document_id: uuid.UUID) -> Documen
     return result.scalars().unique().one_or_none()
 
 
-async def get_document_file_path(session: AsyncSession, document_id: uuid.UUID):
+async def get_document_file_path(
+    session: AsyncSession, document_id: uuid.UUID
+) -> tuple[Document, Path]:
     document = await get_document(session, document_id)
     if document is None or not document.versions:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
@@ -175,6 +217,30 @@ async def get_document_file_path(session: AsyncSession, document_id: uuid.UUID):
     if not path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found.")
     return document, path
+
+
+async def get_document_file_bytes(
+    session: AsyncSession, document_id: uuid.UUID
+) -> tuple[Document, bytes]:
+    document = await get_document(session, document_id)
+    if document is None or not document.versions:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    latest = document.versions[-1]
+    if latest.storage_provider == "azure_blob":
+        if not latest.storage_container or not latest.storage_object_key:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Stored Azure Blob metadata is incomplete.",
+            )
+        content = download_document_blob(
+            get_settings(),
+            container=latest.storage_container,
+            object_key=latest.storage_object_key,
+        )
+        return document, content
+
+    _, path = await get_document_file_path(session, document_id)
+    return document, path.read_bytes()
 
 
 async def count_documents(session: AsyncSession) -> int:

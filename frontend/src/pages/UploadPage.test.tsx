@@ -5,7 +5,7 @@ import { App } from '../App';
 import { renderWithProviders } from '../test/render';
 
 describe('UploadPage', () => {
-  it('validates that Phase 1 only accepts PDFs', async () => {
+  it('validates that Phase 2 only accepts PDFs', async () => {
     renderWithProviders(<App />, '/upload');
 
     const input = screen.getByLabelText('PDF document');

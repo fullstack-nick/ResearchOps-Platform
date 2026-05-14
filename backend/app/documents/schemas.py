@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.database.models import WORKFLOW_TYPES
+from app.extraction.schemas import ExtractionSummaryRead
 
 
 class WorkflowStepRead(BaseModel):
@@ -33,6 +34,9 @@ class DocumentVersionRead(BaseModel):
 
     id: UUID
     version_number: int
+    storage_provider: str
+    storage_container: str | None
+    storage_object_key: str | None
     size_bytes: int
     sha256: str
     created_at: datetime
@@ -53,6 +57,7 @@ class DocumentRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     workflow: WorkflowRead
+    extraction_summary: ExtractionSummaryRead
     versions: list[DocumentVersionRead] = Field(
         default_factory=lambda: list[DocumentVersionRead]()
     )
