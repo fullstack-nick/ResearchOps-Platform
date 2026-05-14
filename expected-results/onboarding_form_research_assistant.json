@@ -1,0 +1,16 @@
+{
+  "document_type": "hr_onboarding",
+  "email": "alex.weber@example.test",
+  "person_name": "Alex Weber",
+  "required_hardware": [
+    "laptop",
+    "docking station"
+  ],
+  "required_it_accounts": [
+    "standard researcher"
+  ],
+  "research_group": "Neurodata Operations",
+  "role": "Research Assistant",
+  "start_date": "2026-06-01",
+  "supervisor": "Dr. Mira Novak"
+}

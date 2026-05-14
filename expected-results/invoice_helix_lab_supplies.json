@@ -1,0 +1,15 @@
+{
+  "currency": "EUR",
+  "document_type": "invoice",
+  "due_date": "2026-05-15",
+  "gross_total": 4010.3,
+  "invoice_number": "HLS-2026-0142",
+  "issue_date": "2026-05-01",
+  "missing_fields": [
+    "purchase_order_number"
+  ],
+  "net_amount": 3370.0,
+  "project_code": "BIO-OPS-2026-014",
+  "vat_amount": 640.3,
+  "vendor_name": "Helix Lab Supplies GmbH"
+}

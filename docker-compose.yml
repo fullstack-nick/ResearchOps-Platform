@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:18.3
+    environment:
+      POSTGRES_DB: researchops
+      POSTGRES_USER: researchops
+      POSTGRES_PASSWORD: researchops
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U researchops -d researchops"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://researchops:researchops@postgres:5432/researchops
+      FRONTEND_ORIGIN: http://localhost:5173
+      STORAGE_DIR: /app/storage/uploads
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_uploads:/app/storage/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  backend_uploads:

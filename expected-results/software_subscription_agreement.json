@@ -1,0 +1,11 @@
+{
+  "auto_renewal": true,
+  "document_type": "software_subscription_agreement",
+  "effective_date": "2026-05-01",
+  "expiry_date": "2027-04-30",
+  "parties": [
+    "ResearchOps Institute",
+    "CloudLab Tools Ltd."
+  ],
+  "termination_notice_days": 60
+}

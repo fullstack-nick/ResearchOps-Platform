@@ -1,0 +1,19 @@
+{
+  "action_items": [
+    {
+      "deadline": "2026-05-18",
+      "owner": "Jonas",
+      "task": "Confirm delivery notes"
+    },
+    {
+      "deadline": "2026-05-22",
+      "owner": "Elena",
+      "task": "Update training checklist"
+    }
+  ],
+  "decisions": [
+    "Use shared intake queue for supplier invoices.",
+    "Create checklist for onboarding hardware requests."
+  ],
+  "document_type": "meeting_minutes"
+}
