@@ -47,7 +47,9 @@ ROLE_NAMES = (
     "it",
     "operations_admin",
     "system_admin",
+    "agent_service",
 )
+AGENT_ACTION_STATUSES = ("completed", "failed", "denied")
 
 
 def utc_now() -> datetime:
@@ -575,6 +577,51 @@ class DocumentQuestion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now()
     )
+
+
+class AgentAction(Base):
+    __tablename__ = "agent_actions"
+    __table_args__ = (
+        CheckConstraint(
+            f"status in {AGENT_ACTION_STATUSES!r}".replace("[", "(").replace("]", ")"),
+            name="ck_agent_actions_status",
+        ),
+        Index("ix_agent_actions_tool_created", "tool_name", "created_at"),
+        Index("ix_agent_actions_delegated_created", "delegated_user_id", "created_at"),
+        Index("ix_agent_actions_document_created", "document_id", "created_at"),
+        Index("ix_agent_actions_workflow_created", "workflow_id", "created_at"),
+        Index("ix_agent_actions_correlation", "correlation_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tool_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    agent_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    agent_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    delegated_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
+    )
+    workflow_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="SET NULL"), nullable=True
+    )
+    arguments: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    result_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    correlation_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
+
+    agent_user: Mapped[User | None] = relationship(foreign_keys=[agent_user_id])
+    delegated_user: Mapped[User | None] = relationship(foreign_keys=[delegated_user_id])
+    document: Mapped[Document | None] = relationship()
+    workflow: Mapped[Workflow | None] = relationship()
 
 
 class Approval(Base):

@@ -30,7 +30,7 @@ storage/
 uploads/
 tmp/
 
-agents/
+/agents/
 
 *.log
 npm-debug.log*

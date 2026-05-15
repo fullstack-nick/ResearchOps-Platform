@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     dev_default_user_email: str = "demo.researchops@example.test"
     dev_default_user_roles: str = "operations_admin,researcher"
     dev_default_research_group: str = "operations"
+    mcp_server_name: str = "ResearchOps Azure Agent Platform"
+    mcp_dev_agent_token: str = "local-dev-agent-token"  # noqa: S105
+    mcp_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    mcp_allowed_agent_client_ids: str = ""
+    mcp_max_results: int = 25
+    mcp_service_user_email: str = "agent.researchops@example.test"
 
     @property
     def has_azure_storage_config(self) -> bool:
@@ -87,6 +93,22 @@ class Settings(BaseSettings):
     @property
     def is_entra_auth(self) -> bool:
         return self.auth_mode.lower() == "entra"
+
+    @property
+    def mcp_allowed_origin_values(self) -> set[str]:
+        return {
+            origin.strip()
+            for origin in self.mcp_allowed_origins.split(",")
+            if origin.strip()
+        }
+
+    @property
+    def mcp_allowed_agent_client_id_values(self) -> set[str]:
+        return {
+            client_id.strip()
+            for client_id in self.mcp_allowed_agent_client_ids.split(",")
+            if client_id.strip()
+        }
 
 
 @lru_cache

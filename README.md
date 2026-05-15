@@ -8,14 +8,16 @@ Phase 3 adds document Q&A: every upload also queues an indexing run that calls A
 
 Phase 4 adds Microsoft Entra ID login, role-based access control, and an approval state machine. The backend validates Entra ID JWTs (using `PyJWT` + JWKS) when `AUTH_MODE=entra` and supports a header-based dev mode for local work and tests. Every authenticated request is filtered by the caller's roles — researchers see only their own uploads, finance sees procurement, HR/IT see onboarding, group leads see their research group, and operations/system admins see everything. Each workflow type now expands into a multi-step approval chain (intake → group lead → finance for procurement; intake → HR → IT for onboarding) and the document workspace shows an approval panel where the assigned role can approve or reject each step with a reason. Six dev personas (researcher, group lead, finance, HR, IT, admin) are seeded so reviewers can experience the role differences without provisioning Entra ID.
 
+Phase 5 adds a separate Streamable HTTP MCP server for controlled agent access. Agents call tools at `/mcp` to search visible documents, inspect extracted invoice fields and missing fields, summarize workflow state, request approvals, approve or reject steps through the existing RBAC checks, and export audit logs when the delegated user is an admin. Every MCP tool call writes an `agent_actions` record, and side-effecting tools also write normal audit events with `actor_type='agent'`.
+
 ## Local Stack
 
 - Frontend: React 19.2.6, TypeScript 6.0.3, Vite 8.0.13, TanStack Query 5.100.10
 - Backend: Python 3.14.5 container, FastAPI 0.136.1, SQLAlchemy 2.0.49, Alembic 1.18.4
-- Azure SDK: `azure-ai-documentintelligence==1.0.2`, `azure-storage-blob==12.28.0`, `azure-identity==1.25.3`, `azure-core==1.41.0`, `azure-search-documents==12.0.0`, `openai==2.36.0`, `pyjwt[crypto]==2.12.1`
+- Azure/agent SDK: `azure-ai-documentintelligence==1.0.2`, `azure-storage-blob==12.28.0`, `azure-identity==1.25.3`, `azure-core==1.41.0`, `azure-search-documents==12.0.0`, `openai==2.36.0`, `pyjwt[crypto]==2.12.1`, `mcp==1.27.1`
 - Frontend auth: `@azure/msal-react==5.4.1`, `@azure/msal-browser==5.10.1`
 - Database: PostgreSQL 18.3
-- Local orchestration: Docker Compose with `backend`, `worker`, `indexer`, `frontend`, and `postgres`
+- Local orchestration: Docker Compose with `backend`, `worker`, `indexer`, `mcp-server`, `frontend`, and `postgres`
 
 ## Azure Configuration
 
@@ -59,6 +61,18 @@ $env:DEV_DEFAULT_USER_EMAIL="demo.researchops@example.test"
 
 In `development` mode the backend reads `X-Dev-User-Email` from each request and the frontend ships a `/login` page that lets reviewers switch between seeded personas (`researcher.alice@example.test`, `lead.bob@example.test`, `finance.carol@example.test`, `hr.dan@example.test`, `it.eve@example.test`, `admin.frank@example.test`, plus the existing demo user). In `entra` mode the backend validates Entra ID bearer tokens against the tenant's JWKS endpoint and upserts the user from `oid`/`preferred_username`/`name`/`roles` claims.
 
+Phase 5 MCP server configuration:
+
+```powershell
+$env:MCP_SERVER_NAME="ResearchOps Azure Agent Platform"
+$env:MCP_DEV_AGENT_TOKEN="local-dev-agent-token"
+$env:MCP_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+$env:MCP_ALLOWED_AGENT_CLIENT_IDS="<comma-separated Entra client ids for agent apps>"
+$env:MCP_MAX_RESULTS="25"
+```
+
+In `development` mode MCP clients must send `X-MCP-Agent-Token` and `X-Dev-User-Email`. In `entra` mode the bearer token must pass the normal Entra validation and its client id must appear in `MCP_ALLOWED_AGENT_CLIENT_IDS`.
+
 ## Run
 
 ```powershell
@@ -70,6 +84,8 @@ Then open:
 - Frontend: http://localhost:5173
 - Backend health: http://localhost:8000/healthz
 - OpenAPI: http://localhost:8000/docs
+- MCP server: http://localhost:8002/mcp
+- MCP health: http://localhost:8002/healthz
 
 Use `sample-documents/procurement/invoice_helix_lab_supplies.pdf` for the main Phase 2 demo upload. Procurement documents are extracted automatically; other workflow types remain upload/review only until later phases.
 
