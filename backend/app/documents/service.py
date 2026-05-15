@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.auth.access import document_visibility_filter
 from app.core.config import get_settings
+from app.core.observability import record_counter, record_event, record_histogram
 from app.database.models import (
     WORKFLOW_TYPES,
     AuditEvent,
@@ -71,6 +72,11 @@ async def create_document_upload(
             "workflow_type": workflow_type,
             "sha256": digest,
         },
+    )
+    record_histogram(
+        "researchops.documents.upload_size_bytes",
+        len(content),
+        {"workflow.type": workflow_type},
     )
 
     source_ip = request.client.host if request.client else None
@@ -218,6 +224,22 @@ async def create_document_upload(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Upload failed.",
         )
+    record_counter("researchops.documents.uploaded", 1, {"workflow.type": workflow_type})
+    if extraction_requested:
+        record_counter(
+            "researchops.extraction.runs",
+            1,
+            {"workflow.type": workflow_type, "run.status": "pending"},
+        )
+    record_counter(
+        "researchops.indexing.runs",
+        1,
+        {"workflow.type": workflow_type, "run.status": "pending"},
+    )
+    record_event(
+        "document.uploaded",
+        {"workflow.type": workflow_type, "document.id": str(document_id)},
+    )
     return loaded
 
 

@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     dev_default_user_email: str = "demo.researchops@example.test"
     dev_default_user_roles: str = "operations_admin,researcher"
     dev_default_research_group: str = "operations"
+    applicationinsights_connection_string: str | None = None
+    observability_enabled: bool = False
+    observability_sample_rate: float = 1.0
+    otel_service_name: str | None = None
+    otel_resource_attributes: str = ""
     mcp_server_name: str = "ResearchOps Azure Agent Platform"
     mcp_dev_agent_token: str = "local-dev-agent-token"  # noqa: S105
     mcp_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"

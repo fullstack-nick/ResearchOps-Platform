@@ -1,0 +1,141 @@
+{
+  "uid": "researchops-document-pipeline",
+  "title": "ResearchOps Document Pipeline",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "timezone": "browser",
+  "tags": ["researchops", "azure", "document-pipeline"],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "grafana-azure-monitor-datasource",
+        "current": {
+          "text": "Azure Monitor",
+          "value": "Azure Monitor"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Documents Uploaded By Workflow",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.events'\n| extend Properties=parse_json(Properties), event_name=tostring(Properties['event.name']), workflow_type=tostring(Properties['workflow.type'])\n| where event_name == 'document.uploaded'\n| summarize value=sum(todouble(Sum)) by bin(TimeGenerated, 10m), workflow_type\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Extraction And Indexing Outcomes",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.events'\n| extend Properties=parse_json(Properties), event_name=tostring(Properties['event.name'])\n| where event_name in ('extraction.completed', 'extraction.failed', 'indexing.completed', 'indexing.failed')\n| summarize value=sum(todouble(Sum)) by bin(TimeGenerated, 10m), event_name\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Pipeline Duration",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {"unit": "ms"},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name in ('researchops.extraction.duration_ms', 'researchops.indexing.duration_ms')\n| extend value = iff(todouble(ItemCount) > 0, todouble(Sum) / todouble(ItemCount), todouble(Sum))\n| summarize avg(value) by bin(TimeGenerated, 10m), Name\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "PostgreSQL-Backed Queue Backlog",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.queue.backlog'\n| extend Properties=parse_json(Properties), queue=tostring(Properties['queue.name']), status=tostring(Properties['queue.status']), value=iff(todouble(ItemCount) > 0, todouble(Sum) / todouble(ItemCount), todouble(Sum))\n| summarize avg(value) by bin(TimeGenerated, 5m), queue, status\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Q&A Volume And Failures",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.events'\n| extend Properties=parse_json(Properties), event_name=tostring(Properties['event.name'])\n| where event_name in ('document.question_asked', 'document.question_failed')\n| summarize value=sum(todouble(Sum)) by bin(TimeGenerated, 10m), event_name\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Most Common Missing Fields",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "table",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.events'\n| extend Properties=parse_json(Properties), event_name=tostring(Properties['event.name']), missing_fields=tostring(Properties['missing_fields'])\n| where event_name == 'extraction.completed' and missing_fields != ''\n| mv-expand missing_field=split(missing_fields, ',')\n| summarize value=count() by missing_field=tostring(missing_field)\n| order by value desc"
+          }
+        }
+      ]
+    }
+  ]
+}
+

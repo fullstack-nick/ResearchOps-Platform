@@ -28,6 +28,7 @@ from app.agents.mcp.schemas import (
 )
 from app.auth.access import assert_document_access, document_visibility_filter, is_admin
 from app.core.config import get_settings
+from app.core.observability import record_counter, record_event, record_histogram
 from app.database.models import (
     AgentAction,
     AuditEvent,
@@ -93,6 +94,8 @@ async def execute_tool(
                 duration_ms=_duration_ms(started),
             )
             await session.commit()
+            duration_ms = _duration_ms(started)
+            _record_agent_tool_metrics(tool_name, "completed", duration_ms, context, result)
             return result
     except HTTPException as exc:
         await _record_error(tool_name, arguments, context, started, exc)
@@ -629,6 +632,7 @@ async def _record_error(
             duration_ms=_duration_ms(started),
         )
         await session.commit()
+    _record_agent_tool_metrics(tool_name, status_value, _duration_ms(started), context, None)
 
 
 async def _write_agent_action(
@@ -945,6 +949,33 @@ def _limit(limit: int | None) -> int:
 
 def _duration_ms(started: float) -> int:
     return max(0, int((time.perf_counter() - started) * 1000))
+
+
+def _record_agent_tool_metrics(
+    tool_name: str,
+    status_value: str,
+    duration_ms: int,
+    context: McpAuthContext,
+    result: JsonDict | None,
+) -> None:
+    attributes = {
+        "mcp.tool": tool_name,
+        "mcp.status": status_value,
+        "agent.name": context.agent_name,
+        "delegated_user.id": str(context.delegated_user.id),
+    }
+    record_counter("researchops.agent.tool_calls", 1, attributes)
+    record_histogram("researchops.agent.tool_duration_ms", duration_ms, attributes)
+    if result is not None and "count" in result:
+        record_histogram("researchops.agent.tool_result_count", int(result["count"]), attributes)
+    record_event(
+        "agent.tool_call",
+        {
+            "mcp.tool": tool_name,
+            "mcp.status": status_value,
+            "duration_ms": duration_ms,
+        },
+    )
 
 
 def _clean_reason(reason: str | None) -> str | None:

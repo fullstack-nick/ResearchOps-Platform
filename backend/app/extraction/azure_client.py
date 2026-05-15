@@ -9,6 +9,7 @@ from azure.core.exceptions import AzureError
 from azure.identity import DefaultAzureCredential
 
 from app.core.config import Settings
+from app.core.observability import observe_dependency
 
 
 class DocumentIntelligenceConfigurationError(RuntimeError):
@@ -39,11 +40,19 @@ def build_document_intelligence_client(settings: Settings) -> DocumentIntelligen
 def analyze_invoice_document(settings: Settings, document_bytes: bytes) -> Any:
     client = build_document_intelligence_client(settings)
     try:
-        poller = client.begin_analyze_document(
-            settings.azure_document_intelligence_model_id,
-            body=BytesIO(document_bytes),
-        )
-        return poller.result()
+        with observe_dependency(
+            "azure.document_intelligence.analyze_invoice",
+            {
+                "azure.service": "document_intelligence",
+                "azure.model_id": settings.azure_document_intelligence_model_id,
+                "document.size_bytes": len(document_bytes),
+            },
+        ):
+            poller = client.begin_analyze_document(
+                settings.azure_document_intelligence_model_id,
+                body=BytesIO(document_bytes),
+            )
+            return poller.result()
     except AzureError as exc:
         raise DocumentIntelligenceAnalyzeError(
             "Azure Document Intelligence analysis failed."

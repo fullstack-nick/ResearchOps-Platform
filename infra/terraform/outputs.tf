@@ -94,6 +94,14 @@ output "application_insights_connection_string" {
   sensitive = true
 }
 
+output "grafana_endpoint" {
+  value = azurerm_dashboard_grafana.main.endpoint
+}
+
+output "grafana_name" {
+  value = azurerm_dashboard_grafana.main.name
+}
+
 output "user_assigned_identity_id" {
   value = azurerm_user_assigned_identity.apps.id
 }

@@ -19,6 +19,7 @@ env:
   INDEXER_APP: researchops-vt1zhh-indexer
   MCP_APP: researchops-vt1zhh-mcp
   FRONTEND_APP: researchops-vt1zhh-frontend
+  GRAFANA_APP: researchops-vt1zhh-gfn
 
 jobs:
   build-and-push:
@@ -124,3 +125,16 @@ jobs:
             echo "Attempt $i: backend not yet ready, retrying..."; sleep 20;
           done
           echo "Backend health check failed"; exit 1
+
+      - name: Import Grafana dashboards
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt
+          az extension add --name amg --upgrade
+          WORKSPACE_RESOURCE_ID="$(az resource list \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --resource-type Microsoft.OperationalInsights/workspaces \
+            --query "[0].id" -o tsv)"
+          python scripts/import_grafana_dashboards.py \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --grafana-name "$GRAFANA_APP" \
+            --workspace-resource-id "$WORKSPACE_RESOURCE_ID"

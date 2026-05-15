@@ -8,6 +8,7 @@ from azure.storage.blob import BlobServiceClient, ContentSettings
 from fastapi import HTTPException, status
 
 from app.core.config import Settings
+from app.core.observability import observe_dependency
 
 
 @dataclass(frozen=True)
@@ -58,12 +59,21 @@ def upload_document_blob(
         raise AssertionError("Azure storage settings were validated without a container.")
     blob_client = client.get_blob_client(container=container, blob=object_key)
     try:
-        result = blob_client.upload_blob(
-            content,
-            overwrite=False,
-            content_settings=ContentSettings(content_type=content_type),
-            metadata=metadata,
-        )
+        with observe_dependency(
+            "azure.blob.upload",
+            {
+                "azure.service": "blob",
+                "blob.container": container,
+                "blob.content_type": content_type,
+                "blob.size_bytes": len(content),
+            },
+        ):
+            result = blob_client.upload_blob(
+                content,
+                overwrite=False,
+                content_settings=ContentSettings(content_type=content_type),
+                metadata=metadata,
+            )
     except AzureError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -81,7 +91,11 @@ def download_document_blob(settings: Settings, container: str, object_key: str) 
     client = _blob_service_client(settings)
     blob_client = client.get_blob_client(container=container, blob=object_key)
     try:
-        return bytes(blob_client.download_blob().readall())
+        with observe_dependency(
+            "azure.blob.download",
+            {"azure.service": "blob", "blob.container": container},
+        ):
+            return bytes(blob_client.download_blob().readall())
     except AzureError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

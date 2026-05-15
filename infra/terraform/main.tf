@@ -27,6 +27,12 @@ locals {
   combined      = "${local.name_prefix}-${local.suffix}"
   combined_flat = "${local.name_prefix}${local.suffix}"
   tags          = merge(var.common_tags, { environment = var.environment })
+  otel_resource_attributes = join(",", [
+    "deployment.environment=${var.environment}",
+    "service.namespace=researchops",
+    "cloud.provider=azure",
+    "cloud.platform=azure_container_apps",
+  ])
 }
 
 resource "azurerm_resource_group" "main" {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
+from app.core.observability import record_counter, record_event, record_histogram
 from app.database.models import (
     AuditEvent,
     Document,
@@ -173,6 +175,15 @@ async def claim_next_pending_indexing_run(
         )
     )
     await session.commit()
+    record_counter(
+        "researchops.indexing.runs",
+        1,
+        {"run.status": "processing", "document.id": str(run.document_id)},
+    )
+    record_event(
+        "indexing.started",
+        {"document.id": str(run.document_id), "run.id": str(run.id)},
+    )
     return run.id
 
 
@@ -259,6 +270,7 @@ async def _persist_indexing_chunks(
         )
     )
     await session.commit()
+    _record_indexing_outcome(run, "completed")
 
 
 async def mark_indexing_failed(
@@ -285,6 +297,7 @@ async def mark_indexing_failed(
         )
     )
     await session.commit()
+    _record_indexing_outcome(run, "failed")
 
 
 async def _get_indexing_run(session: AsyncSession, run_id: uuid.UUID) -> IndexingRun:
@@ -324,6 +337,7 @@ async def answer_document_question(
 
     settings = get_settings()
     cleaned_question = question.strip()
+    started = time.perf_counter()
     citations: list[dict[str, Any]] = []
     answer: str | None = None
     question_status = "completed"
@@ -400,6 +414,31 @@ async def answer_document_question(
     )
     await session.commit()
     await session.refresh(record)
+    duration_ms = (time.perf_counter() - started) * 1000
+    record_counter(
+        "researchops.qa.requests",
+        1,
+        {"qa.status": question_status, "document.id": str(document_id)},
+    )
+    record_histogram(
+        "researchops.qa.duration_ms",
+        duration_ms,
+        {"qa.status": question_status, "document.id": str(document_id)},
+    )
+    record_histogram(
+        "researchops.qa.citations",
+        len(citations),
+        {"qa.status": question_status, "document.id": str(document_id)},
+    )
+    record_event(
+        "document.question_asked" if question_status == "completed" else "document.question_failed",
+        {
+            "document.id": str(document_id),
+            "question.id": str(question_id),
+            "qa.status": question_status,
+            "citation_count": len(citations),
+        },
+    )
     return record
 
 
@@ -419,3 +458,24 @@ async def list_document_questions(
         .order_by(DocumentQuestion.created_at.desc(), DocumentQuestion.id.desc())
     )
     return list(result.scalars().all())
+
+
+def _record_indexing_outcome(run: IndexingRun, status_value: str) -> None:
+    attributes = {
+        "run.status": status_value,
+        "document.id": str(run.document_id),
+        "model.id": run.read_model_id,
+    }
+    record_counter("researchops.indexing.runs", 1, attributes)
+    if run.started_at and run.completed_at:
+        duration_ms = (run.completed_at - run.started_at).total_seconds() * 1000
+        record_histogram("researchops.indexing.duration_ms", duration_ms, attributes)
+    record_histogram("researchops.indexing.chunks", run.chunk_count, attributes)
+    record_event(
+        f"indexing.{status_value}",
+        {
+            "document.id": str(run.document_id),
+            "run.id": str(run.id),
+            "chunk_count": run.chunk_count,
+        },
+    )

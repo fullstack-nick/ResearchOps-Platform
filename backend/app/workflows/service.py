@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.service import get_role_names
+from app.core.observability import record_counter, record_event
 from app.database.models import (
     Approval,
     AuditEvent,
@@ -231,5 +232,32 @@ async def decide_step(
         )
     )
     await session.commit()
+    record_counter(
+        "researchops.workflow.decisions",
+        1,
+        {
+            "workflow.type": workflow.workflow_type,
+            "workflow.step": step.step_name,
+            "decision": payload.decision,
+        },
+    )
+    record_event(
+        "approval.granted" if payload.decision == "approved" else "approval.rejected",
+        {
+            "workflow.id": str(workflow.id),
+            "document.id": str(workflow.document_id),
+            "workflow.step": step.step_name,
+            "decision": payload.decision,
+        },
+    )
+    record_event(
+        workflow_event,
+        {
+            "workflow.id": str(workflow.id),
+            "document.id": str(workflow.document_id),
+            "workflow.status": workflow.status,
+            "current_step": workflow.current_step,
+        },
+    )
     refreshed = await get_workflow_for_decision(session, workflow.id)
     return workflow_state_view(refreshed, user)

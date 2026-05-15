@@ -1,0 +1,142 @@
+{
+  "uid": "researchops-system-health",
+  "title": "ResearchOps System Health",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "timezone": "browser",
+  "tags": ["researchops", "azure", "system-health"],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "grafana-azure-monitor-datasource",
+        "current": {
+          "text": "Azure Monitor",
+          "value": "Azure Monitor"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP Requests By Status Class",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.http.server.requests'\n| extend Properties=parse_json(Properties), status_class=tostring(Properties['http.status_class'])\n| summarize value=sum(todouble(Sum)) by bin(TimeGenerated, 5m), status_class\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "HTTP Latency P50 / P95 / P99",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {"unit": "ms"},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.http.server.duration_ms'\n| extend DurationMs=iff(todouble(ItemCount) > 0, todouble(Sum) / todouble(ItemCount), todouble(Sum))\n| summarize p50=percentile(DurationMs, 50), p95=percentile(DurationMs, 95), p99=percentile(DurationMs, 99) by bin(TimeGenerated, 5m)\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "5xx Errors",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {"x": 0, "y": 8, "w": 6, "h": 5},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "table",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where TimeGenerated > ago(6h) and Name == 'researchops.http.server.requests'\n| extend Properties=parse_json(Properties)\n| where tostring(Properties['http.status_class']) == '5xx'\n| summarize value=sum(todouble(Sum))"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Container App Warnings And Restarts",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {"x": 6, "y": 8, "w": 9, "h": 5},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "ContainerAppSystemLogs_CL\n| where TimeGenerated > ago(6h)\n| where ContainerAppName_s startswith 'researchops-'\n| where Type_s == 'Warning' or Reason_s has_any ('Restart', 'Crash', 'BackOff')\n| summarize value=sum(todouble(Count_d)) by bin(TimeGenerated, 5m), ContainerAppName_s, Reason_s\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Recent Exceptions",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {"x": 15, "y": 8, "w": 9, "h": 5},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "table",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppExceptions\n| project TimeGenerated, Type, Message=OuterMessage\n| order by TimeGenerated desc\n| take 20"
+          }
+        }
+      ]
+    }
+  ]
+}
+

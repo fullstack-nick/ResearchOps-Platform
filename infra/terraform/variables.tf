@@ -96,3 +96,9 @@ variable "common_tags" {
     phase   = "phase-6-deploy"
   }
 }
+
+variable "grafana_admin_principal_object_ids" {
+  description = "Additional Entra principal object IDs that should receive Grafana Admin on the managed Grafana instance, for example the GitHub Actions OIDC service principal."
+  type        = list(string)
+  default     = ["2b378932-f32b-4577-84ab-73d8fc5ae314"]
+}

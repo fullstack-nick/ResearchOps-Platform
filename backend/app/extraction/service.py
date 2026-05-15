@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings, get_settings
+from app.core.observability import record_counter, record_event, record_histogram
 from app.database.models import (
     AuditEvent,
     Document,
@@ -208,6 +209,15 @@ async def correct_extracted_field(
     )
     await session.commit()
     await session.refresh(field)
+    record_counter(
+        "researchops.extraction.field_corrections",
+        1,
+        {"field.key": field.field_key, "document.id": str(document_id)},
+    )
+    record_event(
+        "field.corrected",
+        {"field.key": field.field_key, "document.id": str(document_id)},
+    )
     return ExtractedFieldRead.model_validate(field)
 
 
@@ -258,6 +268,15 @@ async def claim_next_pending_run(session: AsyncSession) -> uuid.UUID | None:
         )
     )
     await session.commit()
+    record_counter(
+        "researchops.extraction.runs",
+        1,
+        {"run.status": "processing", "document.id": str(run.document_id)},
+    )
+    record_event(
+        "extraction.started",
+        {"document.id": str(run.document_id), "run.id": str(run.id)},
+    )
     return run.id
 
 
@@ -349,6 +368,7 @@ async def persist_invoice_extraction(
         )
     )
     await session.commit()
+    _record_extraction_outcome(run, "completed", len(invoice.fields), len(invoice.line_items))
 
 
 async def mark_extraction_failed(
@@ -373,6 +393,7 @@ async def mark_extraction_failed(
         )
     )
     await session.commit()
+    _record_extraction_outcome(run, "failed", 0, 0)
 
 
 async def _get_run_for_processing(session: AsyncSession, run_id: uuid.UUID) -> ExtractionRun:
@@ -413,4 +434,37 @@ def _response_from_run(run: ExtractionRun) -> ExtractionResponse:
         fields=[ExtractedFieldRead.model_validate(field) for field in run.fields],
         missing_fields=run.missing_fields or [],
         line_items=[ExtractedLineItemRead.model_validate(item) for item in run.line_items],
+    )
+
+
+def _record_extraction_outcome(
+    run: ExtractionRun,
+    status_value: str,
+    field_count: int,
+    line_item_count: int,
+) -> None:
+    attributes = {
+        "run.status": status_value,
+        "document.id": str(run.document_id),
+        "model.id": run.model_id,
+    }
+    record_counter("researchops.extraction.runs", 1, attributes)
+    if run.started_at and run.completed_at:
+        duration_ms = (run.completed_at - run.started_at).total_seconds() * 1000
+        record_histogram("researchops.extraction.duration_ms", duration_ms, attributes)
+    record_histogram(
+        "researchops.extraction.missing_fields",
+        len(run.missing_fields or []),
+        attributes,
+    )
+    record_histogram("researchops.extraction.fields", field_count, attributes)
+    record_histogram("researchops.extraction.line_items", line_item_count, attributes)
+    record_event(
+        f"extraction.{status_value}",
+        {
+            "document.id": str(run.document_id),
+            "run.id": str(run.id),
+            "missing_field_count": len(run.missing_fields or []),
+            "missing_fields": ",".join(run.missing_fields or []),
+        },
     )

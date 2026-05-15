@@ -20,6 +20,7 @@ from fastapi import HTTPException, status
 from openai import AzureOpenAI, OpenAIError
 
 from app.core.config import Settings
+from app.core.observability import observe_dependency
 from app.extraction.azure_client import build_document_intelligence_client
 
 VECTOR_PROFILE_NAME = "researchops-vector-profile"
@@ -133,7 +134,14 @@ def ensure_search_index(settings: Settings) -> None:
         vector_search=vector_search,
     )
     try:
-        client.create_or_update_index(index)
+        with observe_dependency(
+            "azure.search.ensure_index",
+            {
+                "azure.service": "ai_search",
+                "search.index": settings.azure_search_index_name,
+            },
+        ):
+            client.create_or_update_index(index)
     except AzureError as exc:
         raise SearchAzureError("Azure AI Search index creation failed.") from exc
 
@@ -141,11 +149,19 @@ def ensure_search_index(settings: Settings) -> None:
 def analyze_document_text(settings: Settings, document_bytes: bytes) -> Any:
     client = build_document_intelligence_client(settings)
     try:
-        poller = client.begin_analyze_document(
-            settings.azure_document_intelligence_read_model_id,
-            body=BytesIO(document_bytes),
-        )
-        return poller.result()
+        with observe_dependency(
+            "azure.document_intelligence.analyze_read",
+            {
+                "azure.service": "document_intelligence",
+                "azure.model_id": settings.azure_document_intelligence_read_model_id,
+                "document.size_bytes": len(document_bytes),
+            },
+        ):
+            poller = client.begin_analyze_document(
+                settings.azure_document_intelligence_read_model_id,
+                body=BytesIO(document_bytes),
+            )
+            return poller.result()
     except AzureError as exc:
         raise SearchAzureError(
             "Azure Document Intelligence read analysis failed."
@@ -155,11 +171,19 @@ def analyze_document_text(settings: Settings, document_bytes: bytes) -> Any:
 def embed_texts(settings: Settings, texts: list[str]) -> list[list[float]]:
     client = build_openai_client(settings)
     try:
-        response = client.embeddings.create(
-            model=settings.azure_openai_embedding_deployment,
-            input=texts,
-            dimensions=settings.azure_openai_embedding_dimensions,
-        )
+        with observe_dependency(
+            "azure.openai.embeddings",
+            {
+                "azure.service": "openai",
+                "openai.deployment": settings.azure_openai_embedding_deployment,
+                "openai.input_count": len(texts),
+            },
+        ):
+            response = client.embeddings.create(
+                model=settings.azure_openai_embedding_deployment,
+                input=texts,
+                dimensions=settings.azure_openai_embedding_dimensions,
+            )
     except OpenAIError as exc:
         raise SearchAzureError("Azure OpenAI embedding request failed.") from exc
     return [list(item.embedding) for item in response.data]
@@ -170,7 +194,15 @@ def upload_chunk_documents(settings: Settings, documents: list[dict[str, Any]]) 
         return
     client: Any = build_search_client(settings)
     try:
-        client.upload_documents(documents=documents)
+        with observe_dependency(
+            "azure.search.upload_documents",
+            {
+                "azure.service": "ai_search",
+                "search.index": settings.azure_search_index_name,
+                "search.document_count": len(documents),
+            },
+        ):
+            client.upload_documents(documents=documents)
     except AzureError as exc:
         raise SearchAzureError("Azure AI Search chunk upload failed.") from exc
 
@@ -178,17 +210,21 @@ def upload_chunk_documents(settings: Settings, documents: list[dict[str, Any]]) 
 def delete_chunks_from_index(settings: Settings, document_id: str) -> None:
     client: Any = build_search_client(settings)
     try:
-        existing = client.search(
-            search_text="*",
-            filter=f"document_id eq '{document_id}'",
-            select=["chunk_id"],
-            top=1000,
-        )
-        keys: list[dict[str, Any]] = [
-            {"chunk_id": item["chunk_id"]} for item in existing
-        ]
-        if keys:
-            client.delete_documents(documents=keys)
+        with observe_dependency(
+            "azure.search.delete_document_chunks",
+            {"azure.service": "ai_search", "search.index": settings.azure_search_index_name},
+        ):
+            existing = client.search(
+                search_text="*",
+                filter=f"document_id eq '{document_id}'",
+                select=["chunk_id"],
+                top=1000,
+            )
+            keys: list[dict[str, Any]] = [
+                {"chunk_id": item["chunk_id"]} for item in existing
+            ]
+            if keys:
+                client.delete_documents(documents=keys)
     except AzureError as exc:
         raise SearchAzureError("Azure AI Search chunk cleanup failed.") from exc
 
@@ -208,24 +244,32 @@ def search_document_chunks(
     )
     chunks: list[dict[str, Any]] = []
     try:
-        results = client.search(
-            search_text=query,
-            vector_queries=[vector_query],
-            filter=f"document_id eq '{document_id}'",
-            select=["chunk_id", "document_id", "chunk_index", "page_number", "content"],
-            top=top,
-        )
-        for item in results:
-            chunks.append(
-                {
-                    "chunk_id": item["chunk_id"],
-                    "document_id": item["document_id"],
-                    "chunk_index": item["chunk_index"],
-                    "page_number": item.get("page_number"),
-                    "content": item["content"],
-                    "score": item.get("@search.score"),
-                }
+        with observe_dependency(
+            "azure.search.hybrid_query",
+            {
+                "azure.service": "ai_search",
+                "search.index": settings.azure_search_index_name,
+                "search.top": top,
+            },
+        ):
+            results = client.search(
+                search_text=query,
+                vector_queries=[vector_query],
+                filter=f"document_id eq '{document_id}'",
+                select=["chunk_id", "document_id", "chunk_index", "page_number", "content"],
+                top=top,
             )
+            for item in results:
+                chunks.append(
+                    {
+                        "chunk_id": item["chunk_id"],
+                        "document_id": item["document_id"],
+                        "chunk_index": item["chunk_index"],
+                        "page_number": item.get("page_number"),
+                        "content": item["content"],
+                        "score": item.get("@search.score"),
+                    }
+                )
     except AzureError as exc:
         raise SearchAzureError("Azure AI Search hybrid query failed.") from exc
     return chunks
@@ -248,15 +292,23 @@ def generate_grounded_answer(
     )
     user_prompt = f"Document sources:\n{context}\n\nQuestion: {question}"
     try:
-        response = client.chat.completions.create(
-            model=settings.azure_openai_chat_deployment,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0,
-            max_tokens=600,
-        )
+        with observe_dependency(
+            "azure.openai.chat_completion",
+            {
+                "azure.service": "openai",
+                "openai.deployment": settings.azure_openai_chat_deployment,
+                "openai.source_count": len(chunks),
+            },
+        ):
+            response = client.chat.completions.create(
+                model=settings.azure_openai_chat_deployment,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0,
+                max_tokens=600,
+            )
     except OpenAIError as exc:
         raise SearchAzureError("Azure OpenAI chat completion failed.") from exc
     return (response.choices[0].message.content or "").strip()

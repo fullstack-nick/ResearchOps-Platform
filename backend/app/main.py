@@ -9,6 +9,7 @@ from app.api.routes import router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.middleware import correlation_middleware
+from app.core.observability import configure_observability
 from app.database.session import engine
 
 
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
+    configure_observability(settings, "researchops-backend")
     app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
     app.middleware("http")(correlation_middleware)
     app.add_middleware(

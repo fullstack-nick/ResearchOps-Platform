@@ -1,0 +1,145 @@
+{
+  "uid": "researchops-agent-tools",
+  "title": "ResearchOps Agent Tool Calls",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "timezone": "browser",
+  "tags": ["researchops", "azure", "mcp", "agent-tools"],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "grafana-azure-monitor-datasource",
+        "current": {
+          "text": "Azure Monitor",
+          "value": "Azure Monitor"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "MCP Tool Calls By Status",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.agent.tool_calls'\n| extend Properties=parse_json(Properties), status=tostring(Properties['mcp.status'])\n| summarize value=sum(todouble(Sum)) by bin(TimeGenerated, 10m), status\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "Top Tools",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "table",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.agent.tool_calls'\n| extend Properties=parse_json(Properties), tool=tostring(Properties['mcp.tool'])\n| summarize calls=sum(todouble(Sum)) by tool\n| order by calls desc\n| take 12"
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Tool Duration",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {"unit": "ms"},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.agent.tool_duration_ms'\n| extend Properties=parse_json(Properties), tool=tostring(Properties['mcp.tool']), value=iff(todouble(ItemCount) > 0, todouble(Sum) / todouble(ItemCount), todouble(Sum))\n| summarize avg(value) by bin(TimeGenerated, 10m), tool\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Denied Or Failed Tool Calls",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "table",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.events'\n| extend Properties=parse_json(Properties), event_name=tostring(Properties['event.name']), tool=tostring(Properties['mcp.tool']), status=tostring(Properties['mcp.status'])\n| where event_name == 'agent.tool_call' and status in ('failed', 'denied')\n| project TimeGenerated, tool, status\n| order by TimeGenerated desc\n| take 50"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "MCP HTTP Latency",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {"unit": "ms"},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "time_series",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.http.server.duration_ms' and AppRoleName has 'researchops-mcp'\n| extend DurationMs=iff(todouble(ItemCount) > 0, todouble(Sum) / todouble(ItemCount), todouble(Sum))\n| summarize p95=percentile(DurationMs, 95) by bin(TimeGenerated, 10m)\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Distinct Delegated Users",
+      "datasource": {"type": "grafana-azure-monitor-datasource", "uid": "${datasource}"},
+      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "format": "table",
+          "azureLogAnalytics": {
+            "resources": ["__WORKSPACE_RESOURCE_ID__"],
+            "query": "AppMetrics\n| where Name == 'researchops.events'\n| extend Properties=parse_json(Properties), event_name=tostring(Properties['event.name']), delegated=tostring(Properties['delegated_user.id'])\n| where event_name == 'agent.tool_call'\n| summarize value=dcount(delegated)"
+          }
+        }
+      ]
+    }
+  ]
+}
+

@@ -181,7 +181,27 @@ resource "azurerm_container_app" "backend" {
         name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         secret_name = "app-insights-conn"
       }
+      env {
+        name  = "OBSERVABILITY_ENABLED"
+        value = "true"
+      }
+      env {
+        name  = "OBSERVABILITY_SAMPLE_RATE"
+        value = "1.0"
+      }
+      env {
+        name  = "OTEL_SERVICE_NAME"
+        value = "researchops-backend"
+      }
+      env {
+        name  = "OTEL_RESOURCE_ATTRIBUTES"
+        value = local.otel_resource_attributes
+      }
     }
+  }
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
   }
 
   depends_on = [
@@ -219,6 +239,10 @@ resource "azurerm_container_app" "worker" {
   secret {
     name  = "docintel-key"
     value = local.shared_secrets.docintel_key
+  }
+  secret {
+    name  = "app-insights-conn"
+    value = local.shared_secrets.app_insights_conn_string
   }
 
   template {
@@ -260,7 +284,31 @@ resource "azurerm_container_app" "worker" {
         name        = "AZURE_DOCUMENT_INTELLIGENCE_KEY"
         secret_name = "docintel-key"
       }
+      env {
+        name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        secret_name = "app-insights-conn"
+      }
+      env {
+        name  = "OBSERVABILITY_ENABLED"
+        value = "true"
+      }
+      env {
+        name  = "OBSERVABILITY_SAMPLE_RATE"
+        value = "1.0"
+      }
+      env {
+        name  = "OTEL_SERVICE_NAME"
+        value = "researchops-worker"
+      }
+      env {
+        name  = "OTEL_RESOURCE_ATTRIBUTES"
+        value = local.otel_resource_attributes
+      }
     }
+  }
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
   }
 
   depends_on = [
@@ -305,6 +353,10 @@ resource "azurerm_container_app" "indexer" {
   secret {
     name  = "search-admin-key"
     value = local.shared_secrets.search_admin_key
+  }
+  secret {
+    name  = "app-insights-conn"
+    value = local.shared_secrets.app_insights_conn_string
   }
 
   template {
@@ -382,7 +434,31 @@ resource "azurerm_container_app" "indexer" {
         name  = "AZURE_OPENAI_CHAT_DEPLOYMENT"
         value = azurerm_cognitive_deployment.chat.name
       }
+      env {
+        name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        secret_name = "app-insights-conn"
+      }
+      env {
+        name  = "OBSERVABILITY_ENABLED"
+        value = "true"
+      }
+      env {
+        name  = "OBSERVABILITY_SAMPLE_RATE"
+        value = "1.0"
+      }
+      env {
+        name  = "OTEL_SERVICE_NAME"
+        value = "researchops-indexer"
+      }
+      env {
+        name  = "OTEL_RESOURCE_ATTRIBUTES"
+        value = local.otel_resource_attributes
+      }
     }
+  }
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
   }
 
   depends_on = [
@@ -432,6 +508,10 @@ resource "azurerm_container_app" "mcp" {
   secret {
     name  = "mcp-dev-token"
     value = local.shared_secrets.mcp_dev_token
+  }
+  secret {
+    name  = "app-insights-conn"
+    value = local.shared_secrets.app_insights_conn_string
   }
 
   template {
@@ -486,7 +566,31 @@ resource "azurerm_container_app" "mcp" {
         name  = "STORAGE_DIR"
         value = "/app/storage/uploads"
       }
+      env {
+        name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        secret_name = "app-insights-conn"
+      }
+      env {
+        name  = "OBSERVABILITY_ENABLED"
+        value = "true"
+      }
+      env {
+        name  = "OBSERVABILITY_SAMPLE_RATE"
+        value = "1.0"
+      }
+      env {
+        name  = "OTEL_SERVICE_NAME"
+        value = "researchops-mcp"
+      }
+      env {
+        name  = "OTEL_RESOURCE_ATTRIBUTES"
+        value = local.otel_resource_attributes
+      }
     }
+  }
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
   }
 
   depends_on = [
@@ -543,6 +647,10 @@ resource "azurerm_container_app" "frontend" {
         value = local.mcp_url
       }
     }
+  }
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
   }
 
   depends_on = [
