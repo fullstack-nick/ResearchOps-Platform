@@ -1,0 +1,43 @@
+name: backend-ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: pip install uv==0.11.14
+
+      - name: Sync deps
+        run: uv sync --frozen
+
+      - name: Ruff
+        run: uv run ruff check
+
+      - name: Pyright
+        run: uv run pyright
+
+      - name: Pytest (with PostgreSQL via Testcontainers)
+        env:
+          TESTCONTAINERS_HOST_OVERRIDE: localhost
+        run: uv run pytest -q

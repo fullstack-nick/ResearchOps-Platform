@@ -43,3 +43,11 @@ pnpm-debug.log*
 !.env.example
 
 docker-compose.override.yml
+
+# Terraform local state and plans (contain secrets)
+infra/terraform/.terraform/
+infra/terraform/terraform.tfstate
+infra/terraform/terraform.tfstate.*
+infra/terraform/tfplan
+infra/terraform/.tfoutputs.json
+infra/terraform/*.auto.tfvars

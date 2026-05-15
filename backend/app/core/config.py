@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="postgresql+asyncpg://researchops:researchops@localhost:5432/researchops"
     )
-    frontend_origin: AnyUrl | str = "http://localhost:5173"
+    frontend_origin: str = "http://localhost:5173"
     storage_dir: Path = Path("storage/uploads")
     max_upload_bytes: int = 20 * 1024 * 1024
     azure_storage_container: str | None = None
@@ -59,6 +59,14 @@ class Settings(BaseSettings):
             self.azure_storage_container
             and (self.azure_storage_connection_string or self.azure_storage_account_url)
         )
+
+    @property
+    def frontend_origin_values(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.frontend_origin.split(",")
+            if origin.strip()
+        ]
 
     @property
     def has_document_intelligence_config(self) -> bool:
