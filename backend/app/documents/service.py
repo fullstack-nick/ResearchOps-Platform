@@ -6,17 +6,17 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.auth.access import document_visibility_filter
 from app.core.config import get_settings
 from app.database.models import (
-    DEMO_USER_ID,
     WORKFLOW_TYPES,
     AuditEvent,
     Document,
     DocumentVersion,
     ExtractionRun,
     IndexingRun,
+    User,
     Workflow,
-    WorkflowStep,
 )
 from app.documents.azure_storage import download_document_blob, upload_document_blob
 from app.documents.storage import (
@@ -24,6 +24,7 @@ from app.documents.storage import (
     resolve_storage_path,
     validate_pdf_upload,
 )
+from app.workflows.service import build_workflow_steps_for_type
 
 
 def validate_workflow_type(workflow_type: str) -> None:
@@ -47,6 +48,7 @@ async def create_document_upload(
     upload: UploadFile,
     workflow_type: str,
     request: Request,
+    user: User,
 ) -> Document:
     validate_workflow_type(workflow_type)
     safe_filename = validate_pdf_upload(upload)
@@ -76,7 +78,7 @@ async def create_document_upload(
     extraction_requested = workflow_type == "procurement"
     document = Document(
         id=document_id,
-        owner_user_id=DEMO_USER_ID,
+        owner_user_id=user.id,
         original_filename=upload.filename or safe_filename,
         safe_filename=safe_filename,
         content_type="application/pdf",
@@ -84,6 +86,7 @@ async def create_document_upload(
         sha256=digest,
         workflow_type=workflow_type,
         status="extraction_pending" if extraction_requested else "uploaded",
+        research_group=user.research_group,
     )
     version = DocumentVersion(
         id=version_id,
@@ -96,24 +99,20 @@ async def create_document_upload(
         storage_url=blob.url,
         size_bytes=len(content),
         sha256=digest,
-        created_by_user_id=DEMO_USER_ID,
+        created_by_user_id=user.id,
     )
+    workflow_steps = build_workflow_steps_for_type(workflow_id, workflow_type)
+    first_step = workflow_steps[0]
     workflow = Workflow(
         id=workflow_id,
         document_id=document_id,
         workflow_type=workflow_type,
         status="awaiting_review",
-        current_step="intake_review",
-    )
-    step = WorkflowStep(
-        workflow_id=workflow_id,
-        step_name="intake_review",
-        status="pending",
-        assigned_role="operations_admin",
+        current_step=first_step.step_name,
     )
     document_uploaded = AuditEvent(
         actor_type="user",
-        actor_id=DEMO_USER_ID,
+        actor_id=user.id,
         document_id=document_id,
         workflow_id=workflow_id,
         event_type="document.uploaded",
@@ -122,6 +121,7 @@ async def create_document_upload(
             "workflow_type": workflow_type,
             "size_bytes": len(content),
             "sha256": digest,
+            "research_group": user.research_group,
         },
         reason="Phase 2 Azure Blob document intake",
         source_ip=source_ip,
@@ -135,14 +135,21 @@ async def create_document_upload(
         event_type="workflow.created",
         after_value={
             "status": "awaiting_review",
-            "current_step": "intake_review",
-            "assigned_role": "operations_admin",
+            "current_step": first_step.step_name,
+            "step_names": [step.step_name for step in workflow_steps],
         },
         reason="Workflow created from document upload",
         source_ip=source_ip,
         correlation_id=correlation_id,
     )
-    records: list[object] = [document, version, workflow, step, document_uploaded, workflow_created]
+    records: list[object] = [
+        document,
+        version,
+        workflow,
+        *workflow_steps,
+        document_uploaded,
+        workflow_created,
+    ]
 
     if extraction_requested:
         extraction_run_id = uuid.uuid4()
@@ -216,10 +223,14 @@ async def create_document_upload(
 
 async def list_documents(
     session: AsyncSession,
+    user: User,
     workflow_type: str | None = None,
     status_filter: str | None = None,
 ) -> list[Document]:
     statement = document_query().order_by(Document.created_at.desc())
+    visibility = document_visibility_filter(user)
+    if visibility is not None:
+        statement = statement.where(visibility)
     if workflow_type is not None:
         validate_workflow_type(workflow_type)
         statement = statement.where(Document.workflow_type == workflow_type)

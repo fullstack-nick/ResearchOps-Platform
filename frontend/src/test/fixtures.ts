@@ -1,11 +1,15 @@
 import type {
   AuditEventListResponse,
+  AuthConfig,
+  CurrentUser,
   DashboardSummary,
+  DevUserListResponse,
   DocumentListResponse,
   DocumentRecord,
   ExtractionResponse,
   IndexingResponse,
   QuestionListResponse,
+  WorkflowState,
 } from '../api/types';
 
 export const documentFixture: DocumentRecord = {
@@ -224,6 +228,96 @@ export const indexingFixture: IndexingResponse = {
       char_count: 58,
     },
   ],
+};
+
+export const currentUserFixture: CurrentUser = {
+  id: '00000000-0000-4000-8000-000000000001',
+  email: 'demo.researchops@example.test',
+  display_name: 'Demo Operations User',
+  research_group: 'operations',
+  is_active: true,
+  roles: ['operations_admin', 'researcher'],
+};
+
+export const authConfigFixture: AuthConfig = {
+  auth_mode: 'development',
+  entra_client_id: null,
+  entra_authority: null,
+  entra_required_scope: 'access_as_user',
+};
+
+export const devUsersFixture: DevUserListResponse = {
+  users: [
+    {
+      email: 'demo.researchops@example.test',
+      display_name: 'Demo Operations User',
+      research_group: 'operations',
+      roles: ['operations_admin', 'researcher'],
+    },
+    {
+      email: 'researcher.alice@example.test',
+      display_name: 'Alice Researcher',
+      research_group: 'genomics',
+      roles: ['researcher'],
+    },
+    {
+      email: 'lead.bob@example.test',
+      display_name: 'Bob Group Lead',
+      research_group: 'genomics',
+      roles: ['group_lead'],
+    },
+    {
+      email: 'finance.carol@example.test',
+      display_name: 'Carol Finance',
+      research_group: 'operations',
+      roles: ['finance'],
+    },
+  ],
+};
+
+export const workflowStateFixture: WorkflowState = {
+  id: documentFixture.workflow.id,
+  document_id: documentFixture.id,
+  workflow_type: 'procurement',
+  status: 'awaiting_review',
+  current_step: 'intake_review',
+  research_group: 'genomics',
+  created_at: '2026-05-14T10:00:00Z',
+  updated_at: '2026-05-14T10:00:00Z',
+  steps: [
+    {
+      id: '33333333-3333-4333-8333-333333333333',
+      step_name: 'intake_review',
+      status: 'pending',
+      assigned_role: 'operations_admin',
+      step_order: 0,
+      completed_at: null,
+      created_at: '2026-05-14T10:00:00Z',
+      approvals: [],
+    },
+    {
+      id: '33333333-3333-4333-8333-333333333334',
+      step_name: 'group_lead_approval',
+      status: 'pending',
+      assigned_role: 'group_lead',
+      step_order: 1,
+      completed_at: null,
+      created_at: '2026-05-14T10:00:00Z',
+      approvals: [],
+    },
+    {
+      id: '33333333-3333-4333-8333-333333333335',
+      step_name: 'finance_approval',
+      status: 'pending',
+      assigned_role: 'finance',
+      step_order: 2,
+      completed_at: null,
+      created_at: '2026-05-14T10:00:00Z',
+      approvals: [],
+    },
+  ],
+  pending_step_id: '33333333-3333-4333-8333-333333333333',
+  can_decide_current_step: true,
 };
 
 export const questionsFixture: QuestionListResponse = {

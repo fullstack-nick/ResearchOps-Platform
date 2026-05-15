@@ -3,6 +3,8 @@ import { render } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 
+import { AuthProvider } from '../auth/AuthContext';
+
 export function renderWithProviders(ui: ReactElement, initialPath = '/') {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -12,7 +14,9 @@ export function renderWithProviders(ui: ReactElement, initialPath = '/') {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[initialPath]}>{ui}</MemoryRouter>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <AuthProvider>{ui}</AuthProvider>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

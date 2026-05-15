@@ -198,3 +198,65 @@ export type QuestionAnswer = {
 export type QuestionListResponse = {
   questions: QuestionAnswer[];
 };
+
+export type CurrentUser = {
+  id: string;
+  email: string;
+  display_name: string;
+  research_group: string | null;
+  is_active: boolean;
+  roles: string[];
+};
+
+export type AuthConfig = {
+  auth_mode: string;
+  entra_client_id: string | null;
+  entra_authority: string | null;
+  entra_required_scope: string | null;
+};
+
+export type DevUserOption = {
+  email: string;
+  display_name: string;
+  research_group: string | null;
+  roles: string[];
+};
+
+export type DevUserListResponse = {
+  users: DevUserOption[];
+};
+
+export type Approval = {
+  id: string;
+  workflow_id: string;
+  workflow_step_id: string;
+  approver_user_id: string;
+  decision: 'approved' | 'rejected' | string;
+  reason: string | null;
+  created_at: string;
+};
+
+export type WorkflowStepDetail = {
+  id: string;
+  step_name: string;
+  status: string;
+  assigned_role: string;
+  step_order: number;
+  completed_at: string | null;
+  created_at: string;
+  approvals: Approval[];
+};
+
+export type WorkflowState = {
+  id: string;
+  document_id: string;
+  workflow_type: string;
+  status: string;
+  current_step: string;
+  research_group: string | null;
+  created_at: string;
+  updated_at: string;
+  steps: WorkflowStepDetail[];
+  pending_step_id: string | null;
+  can_decide_current_step: boolean;
+};

@@ -14,6 +14,8 @@ class WorkflowStepRead(BaseModel):
     step_name: str
     status: str
     assigned_role: str
+    step_order: int
+    completed_at: datetime | None
     created_at: datetime
 
 
@@ -54,6 +56,7 @@ class DocumentRead(BaseModel):
     sha256: str
     workflow_type: str
     status: str
+    research_group: str | None = None
     created_at: datetime
     updated_at: datetime
     workflow: WorkflowRead

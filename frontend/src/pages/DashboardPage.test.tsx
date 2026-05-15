@@ -2,14 +2,31 @@ import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../App';
-import { dashboardFixture } from '../test/fixtures';
+import {
+  authConfigFixture,
+  currentUserFixture,
+  dashboardFixture,
+  devUsersFixture,
+} from '../test/fixtures';
 import { renderWithProviders } from '../test/render';
 
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify(dashboardFixture), { status: 200 })),
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url.includes('/api/auth/me')) {
+          return new Response(JSON.stringify(currentUserFixture), { status: 200 });
+        }
+        if (url.includes('/api/auth/config')) {
+          return new Response(JSON.stringify(authConfigFixture), { status: 200 });
+        }
+        if (url.includes('/api/auth/dev-users')) {
+          return new Response(JSON.stringify(devUsersFixture), { status: 200 });
+        }
+        return new Response(JSON.stringify(dashboardFixture), { status: 200 });
+      }),
     );
   });
 

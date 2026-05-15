@@ -12,12 +12,12 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings, get_settings
 from app.database.models import (
-    DEMO_USER_ID,
     AuditEvent,
     Document,
     ExtractedField,
     ExtractedLineItem,
     ExtractionRun,
+    User,
 )
 from app.documents.azure_storage import download_document_blob
 from app.extraction.azure_client import analyze_invoice_document
@@ -88,7 +88,7 @@ async def get_latest_extraction_run(
 
 
 async def retry_extraction(
-    session: AsyncSession, document_id: uuid.UUID, request: Request
+    session: AsyncSession, document_id: uuid.UUID, request: Request, user: User
 ) -> ExtractionResponse:
     document_result = await session.execute(
         select(Document)
@@ -128,8 +128,8 @@ async def retry_extraction(
     session.add(run)
     session.add(
         AuditEvent(
-            actor_type="system",
-            actor_id=None,
+            actor_type="user",
+            actor_id=user.id,
             document_id=document.id,
             workflow_id=document.workflow.id if document.workflow else None,
             event_type="extraction.requested",
@@ -155,6 +155,7 @@ async def correct_extracted_field(
     field_id: uuid.UUID,
     payload: FieldCorrectionRequest,
     request: Request,
+    user: User,
 ) -> ExtractedFieldRead:
     result = await session.execute(
         select(ExtractedField)
@@ -181,14 +182,14 @@ async def correct_extracted_field(
     corrected_value = payload.corrected_value.strip()
     field.corrected_value = corrected_value
     field.correction_reason = payload.reason.strip()
-    field.corrected_by_user_id = DEMO_USER_ID
+    field.corrected_by_user_id = user.id
     field.corrected_at = datetime.now(UTC)
     field.is_missing = False
     await _refresh_run_missing_fields(session, field.extraction_run)
     session.add(
         AuditEvent(
             actor_type="user",
-            actor_id=DEMO_USER_ID,
+            actor_id=user.id,
             document_id=document_id,
             workflow_id=field.extraction_run.document.workflow.id
             if field.extraction_run.document.workflow

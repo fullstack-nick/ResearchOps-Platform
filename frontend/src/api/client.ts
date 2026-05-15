@@ -1,6 +1,10 @@
+import { getAuthHeaders } from '../auth/auth-bridge';
 import type {
   AuditEventListResponse,
+  AuthConfig,
+  CurrentUser,
   DashboardSummary,
+  DevUserListResponse,
   DocumentListResponse,
   DocumentRecord,
   ExtractedField,
@@ -9,13 +13,16 @@ import type {
   QuestionAnswer,
   QuestionListResponse,
   UploadResponse,
+  WorkflowState,
   WorkflowType,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, init);
+  const extraHeaders = getAuthHeaders();
+  const mergedHeaders = { ...extraHeaders, ...(init?.headers as Record<string, string> | undefined) };
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers: mergedHeaders });
   if (!response.ok) {
     const text = await response.text();
     throw new Error(text || `Request failed with ${response.status}`);
@@ -100,5 +107,37 @@ export const api = {
 
   documentFileUrl(documentId: string): string {
     return `${API_BASE_URL}/api/documents/${documentId}/file`;
+  },
+
+  async getAuthMe(): Promise<CurrentUser> {
+    return request<CurrentUser>('/api/auth/me');
+  },
+
+  async getAuthConfig(): Promise<AuthConfig> {
+    return request<AuthConfig>('/api/auth/config');
+  },
+
+  async getDevUsers(): Promise<DevUserListResponse> {
+    return request<DevUserListResponse>('/api/auth/dev-users');
+  },
+
+  async getWorkflowState(workflowId: string): Promise<WorkflowState> {
+    return request<WorkflowState>(`/api/workflows/${workflowId}`);
+  },
+
+  async decideWorkflowStep(
+    workflowId: string,
+    stepId: string,
+    decision: 'approved' | 'rejected',
+    reason: string | null,
+  ): Promise<WorkflowState> {
+    return request<WorkflowState>(
+      `/api/workflows/${workflowId}/steps/${stepId}/decision`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, reason: reason ?? null }),
+      },
+    );
   },
 };

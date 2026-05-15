@@ -22,6 +22,7 @@ import {
   workflowLabels,
 } from '../api/labels';
 import type { ExtractedField, ExtractionResponse } from '../api/types';
+import { ApprovalPanel } from '../components/ApprovalPanel';
 import { PdfPreview } from '../components/PdfPreview';
 import { QaPanel } from '../components/QaPanel';
 import { StatusBadge } from '../components/StatusBadge';
@@ -174,6 +175,8 @@ export function DocumentPage() {
             onRetry={() => retryMutation.mutate()}
             onCorrect={(payload) => correctionMutation.mutate(payload)}
           />
+
+          <ApprovalPanel workflowId={document.workflow.id} />
 
           <QaPanel documentId={document.id} />
 

@@ -12,12 +12,12 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.database.models import (
-    DEMO_USER_ID,
     AuditEvent,
     Document,
     DocumentChunk,
     DocumentQuestion,
     IndexingRun,
+    User,
 )
 from app.documents.azure_storage import download_document_blob
 from app.search.azure_client import (
@@ -82,7 +82,7 @@ async def get_document_indexing(
 
 
 async def retry_indexing(
-    session: AsyncSession, document_id: uuid.UUID, request: Request
+    session: AsyncSession, document_id: uuid.UUID, request: Request, user: User
 ) -> IndexingResponse:
     document_result = await session.execute(
         select(Document)
@@ -116,8 +116,8 @@ async def retry_indexing(
     session.add(run)
     session.add(
         AuditEvent(
-            actor_type="system",
-            actor_id=None,
+            actor_type="user",
+            actor_id=user.id,
             document_id=document.id,
             workflow_id=document.workflow.id if document.workflow else None,
             event_type="indexing.requested",
@@ -302,6 +302,7 @@ async def answer_document_question(
     document_id: uuid.UUID,
     question: str,
     request: Request,
+    user: User,
 ) -> DocumentQuestion:
     document_result = await session.execute(
         select(Document)
@@ -373,13 +374,13 @@ async def answer_document_question(
         citations=citations,
         model_id=settings.azure_openai_chat_deployment,
         error_message=error_message,
-        asked_by_user_id=DEMO_USER_ID,
+        asked_by_user_id=user.id,
     )
     session.add(record)
     session.add(
         AuditEvent(
             actor_type="user",
-            actor_id=DEMO_USER_ID,
+            actor_id=user.id,
             document_id=document_id,
             workflow_id=document.workflow.id if document.workflow else None,
             event_type=(

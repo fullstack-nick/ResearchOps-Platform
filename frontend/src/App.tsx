@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Shell } from './components/Shell';
 import { DashboardPage } from './pages/DashboardPage';
 import { DocumentPage } from './pages/DocumentPage';
+import { LoginPage } from './pages/LoginPage';
 import { QueuePage } from './pages/QueuePage';
 import { UploadPage } from './pages/UploadPage';
 
@@ -10,6 +11,7 @@ export function App() {
   return (
     <Shell>
       <Routes>
+        <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<DashboardPage />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/queues" element={<QueuePage />} />

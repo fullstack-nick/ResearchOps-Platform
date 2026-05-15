@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     indexing_chunk_size: int = 1200
     indexing_chunk_overlap: int = 200
     qa_top_chunks: int = 5
+    auth_mode: str = "development"
+    entra_tenant_id: str | None = None
+    entra_client_id: str | None = None
+    entra_audience: str | None = None
+    entra_required_scope: str = "access_as_user"
+    dev_default_user_email: str = "demo.researchops@example.test"
+    dev_default_user_roles: str = "operations_admin,researcher"
+    dev_default_research_group: str = "operations"
 
     @property
     def has_azure_storage_config(self) -> bool:
@@ -57,6 +65,28 @@ class Settings(BaseSettings):
     @property
     def has_azure_openai_config(self) -> bool:
         return bool(self.azure_openai_endpoint)
+
+    @property
+    def entra_authority(self) -> str | None:
+        return (
+            f"https://login.microsoftonline.com/{self.entra_tenant_id}"
+            if self.entra_tenant_id
+            else None
+        )
+
+    @property
+    def entra_jwks_uri(self) -> str | None:
+        return (
+            f"{self.entra_authority}/discovery/v2.0/keys" if self.entra_authority else None
+        )
+
+    @property
+    def entra_issuer(self) -> str | None:
+        return f"{self.entra_authority}/v2.0" if self.entra_authority else None
+
+    @property
+    def is_entra_auth(self) -> bool:
+        return self.auth_mode.lower() == "entra"
 
 
 @lru_cache

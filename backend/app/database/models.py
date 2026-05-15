@@ -38,6 +38,16 @@ STORAGE_PROVIDERS = ("local", "azure_blob")
 EXTRACTION_RUN_STATUSES = ("pending", "processing", "completed", "failed")
 INDEXING_RUN_STATUSES = ("pending", "processing", "completed", "failed")
 QUESTION_STATUSES = ("completed", "failed")
+APPROVAL_DECISIONS = ("approved", "rejected")
+ROLE_NAMES = (
+    "researcher",
+    "group_lead",
+    "finance",
+    "hr",
+    "it",
+    "operations_admin",
+    "system_admin",
+)
 
 
 def utc_now() -> datetime:
@@ -54,6 +64,9 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    entra_oid: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    research_group: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now()
     )
@@ -121,6 +134,7 @@ class Document(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     workflow_type: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="uploaded")
+    research_group: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now()
     )
@@ -381,9 +395,14 @@ class Workflow(Base):
     steps: Mapped[list[WorkflowStep]] = relationship(
         back_populates="workflow",
         cascade="all, delete-orphan",
-        order_by="WorkflowStep.created_at",
+        order_by="WorkflowStep.step_order",
     )
     audit_events: Mapped[list[AuditEvent]] = relationship(back_populates="workflow")
+    approvals: Mapped[list[Approval]] = relationship(
+        back_populates="workflow",
+        cascade="all, delete-orphan",
+        order_by="Approval.created_at",
+    )
 
 
 class WorkflowStep(Base):
@@ -392,6 +411,9 @@ class WorkflowStep(Base):
         CheckConstraint(
             f"status in {WORKFLOW_STEP_STATUSES!r}".replace("[", "(").replace("]", ")"),
             name="ck_workflow_steps_status",
+        ),
+        UniqueConstraint(
+            "workflow_id", "step_order", name="uq_workflow_steps_workflow_order"
         ),
     )
 
@@ -402,11 +424,18 @@ class WorkflowStep(Base):
     step_name: Mapped[str] = mapped_column(String(120), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
     assigned_role: Mapped[str] = mapped_column(String(80), nullable=False)
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now()
     )
 
     workflow: Mapped[Workflow] = relationship(back_populates="steps")
+    approvals: Mapped[list[Approval]] = relationship(
+        back_populates="workflow_step",
+        cascade="all, delete-orphan",
+        order_by="Approval.created_at",
+    )
 
 
 class AuditEvent(Base):
@@ -546,3 +575,37 @@ class DocumentQuestion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now()
     )
+
+
+class Approval(Base):
+    __tablename__ = "approvals"
+    __table_args__ = (
+        CheckConstraint(
+            f"decision in {APPROVAL_DECISIONS!r}".replace("[", "(").replace("]", ")"),
+            name="ck_approvals_decision",
+        ),
+        Index("ix_approvals_workflow_step", "workflow_step_id"),
+        Index("ix_approvals_workflow_created", "workflow_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
+    )
+    workflow_step_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workflow_steps.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    approver_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    decision: Mapped[str] = mapped_column(String(40), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )
+
+    workflow: Mapped[Workflow] = relationship(back_populates="approvals")
+    workflow_step: Mapped[WorkflowStep] = relationship(back_populates="approvals")
+    approver: Mapped[User] = relationship()
