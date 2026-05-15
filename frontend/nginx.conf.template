@@ -3,6 +3,27 @@ server {
     listen  [::]:80;
     server_name  _;
 
+    # Browsers enforce strict MIME types for ES module scripts. The default
+    # nginx mime.types ships before .mjs became standard, so register it here
+    # so pdf.js (and any other .mjs worker) loads cleanly.
+    types {
+        text/javascript                       js mjs;
+        text/css                              css;
+        text/html                             html htm;
+        application/json                      json;
+        application/wasm                      wasm;
+        application/manifest+json             webmanifest;
+        font/woff                             woff;
+        font/woff2                            woff2;
+        image/svg+xml                         svg svgz;
+        image/png                             png;
+        image/jpeg                            jpg jpeg;
+        image/gif                             gif;
+        image/webp                            webp;
+        image/x-icon                          ico;
+    }
+    default_type  application/octet-stream;
+
     # SPA root
     root   /usr/share/nginx/html;
     index  index.html;
