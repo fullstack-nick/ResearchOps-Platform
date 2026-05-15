@@ -255,7 +255,7 @@ test('reviews Azure AI Search indexing and asks a grounded question', async ({ p
   await page.getByLabel('Ask about this document').fill('When is payment due?');
   await page.getByRole('button', { name: 'Ask question' }).click();
 
-  await expect(page.getByText('When is payment due?')).toBeVisible();
+  await expect(page.getByText('When is payment due?').first()).toBeVisible();
   await expect(page.getByText(/payment is due net 14 days/)).toBeVisible();
   await expect(page.getByText('document.question_asked')).toBeVisible();
 });
