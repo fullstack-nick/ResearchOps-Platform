@@ -1,9 +1,12 @@
 name: deploy
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      confirm_azure_deploy:
+        description: "Type deploy to build images, update Azure Container Apps, and import Grafana dashboards."
+        required: true
+        type: string
 
 permissions:
   id-token: write
@@ -23,6 +26,7 @@ env:
 
 jobs:
   build-and-push:
+    if: ${{ github.event.inputs.confirm_azure_deploy == 'deploy' }}
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.tag.outputs.tag }}
@@ -69,6 +73,7 @@ jobs:
             ${{ env.AZURE_ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:${{ steps.tag.outputs.tag }}
 
   deploy:
+    if: ${{ github.event.inputs.confirm_azure_deploy == 'deploy' }}
     runs-on: ubuntu-latest
     needs: build-and-push
     steps:

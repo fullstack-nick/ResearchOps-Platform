@@ -88,6 +88,8 @@ $env:OBSERVABILITY_SAMPLE_RATE="1.0"
 
 The deployed Azure environment sets service-specific `OTEL_SERVICE_NAME` values for `researchops-backend`, `researchops-worker`, `researchops-indexer`, and `researchops-mcp`. Dashboards are managed under `grafana/dashboards/` and imported with `scripts/import_grafana_dashboards.py`.
 
+The Azure deployment workflow is manual-only to avoid accidental cloud spend. In GitHub Actions, run `deploy` manually and enter `deploy` in the confirmation input when you intentionally want to update Azure Container Apps and Grafana.
+
 ## Run
 
 ```powershell

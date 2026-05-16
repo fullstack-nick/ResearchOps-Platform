@@ -52,7 +52,7 @@ python scripts/import_grafana_dashboards.py `
   --workspace-resource-id /subscriptions/d87e9e4d-034d-40ad-a622-e71bac89da94/resourceGroups/researchops-vt1zhh-rg/providers/Microsoft.OperationalInsights/workspaces/researchops-vt1zhh-law
 ```
 
-The GitHub deployment workflow installs the Azure Managed Grafana CLI extension and runs this import automatically after the app smoke test.
+The GitHub deployment workflow installs the Azure Managed Grafana CLI extension and runs this import automatically after the app smoke test. The workflow is intentionally manual-only now: run `deploy`, choose **Run workflow**, and type `deploy` in the confirmation input before it will build images, update Container Apps, or import dashboards.
 
 ## Live Verification
 
